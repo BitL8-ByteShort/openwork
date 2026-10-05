@@ -2597,6 +2597,7 @@ export type ExternalMcpConnectionResponse = {
   url: string;
   authType: "oauth" | "apikey" | "none";
   credentialMode: "shared" | "per_member";
+  apiKeyAuthScheme: "bearer" | "token";
   exposeDirectly: boolean;
   connected: boolean;
   connectedAt: string | null;
@@ -2861,6 +2862,7 @@ export type ExternalMcpConnectionCreatedResponse = {
   url: string;
   authType: "oauth" | "apikey" | "none";
   credentialMode: "shared" | "per_member";
+  apiKeyAuthScheme: "bearer" | "token";
   exposeDirectly: boolean;
   connected: boolean;
   connectedAt: string | null;
@@ -2932,6 +2934,7 @@ export type ExternalMcpConnectionUpdatedResponse = {
   url: string;
   authType: "oauth" | "apikey" | "none";
   credentialMode: "shared" | "per_member";
+  apiKeyAuthScheme: "bearer" | "token";
   exposeDirectly: boolean;
   connected: boolean;
   connectedAt: string | null;
@@ -2990,6 +2993,7 @@ export type ExternalMcpConnectionByKeyUpsertInput = {
   credentialMode?: "shared" | "per_member";
   exposeDirectly?: boolean;
   apiKey?: string;
+  apiKeyAuthScheme?: "bearer" | "token";
   oauthClient?: {
     clientId: string;
     clientSecret?: string;
@@ -21211,6 +21215,7 @@ export type PostV1McpConnectionsData = {
         credentialMode?: "shared" | "per_member";
         exposeDirectly?: boolean;
         apiKey?: string;
+        apiKeyAuthScheme?: "bearer" | "token";
         oauthClient?: {
           clientId: string;
           clientSecret?: string;
@@ -21674,6 +21679,7 @@ export type PutV1McpConnectionsByConnectionIdData = {
     credentialMode: "shared" | "per_member";
     exposeDirectly?: boolean;
     apiKey?: string;
+    apiKeyAuthScheme?: "bearer" | "token";
     oauthClient?: {
       clientId: string;
       clientSecret?: string;

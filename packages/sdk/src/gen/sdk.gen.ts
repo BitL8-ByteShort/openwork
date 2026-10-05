@@ -9961,6 +9961,7 @@ export class DenClient extends HeyApiClient {
             credentialMode?: "shared" | "per_member";
             exposeDirectly?: boolean;
             apiKey?: string;
+            apiKeyAuthScheme?: "bearer" | "token";
             oauthClient?: {
               clientId: string;
               clientSecret?: string;
@@ -10262,6 +10263,7 @@ export class DenClient extends HeyApiClient {
       credentialMode: "shared" | "per_member";
       exposeDirectly?: boolean;
       apiKey?: string;
+      apiKeyAuthScheme?: "bearer" | "token";
       oauthClient?: {
         clientId: string;
         clientSecret?: string;
@@ -10286,6 +10288,7 @@ export class DenClient extends HeyApiClient {
             { in: "body", key: "credentialMode" },
             { in: "body", key: "exposeDirectly" },
             { in: "body", key: "apiKey" },
+            { in: "body", key: "apiKeyAuthScheme" },
             { in: "body", key: "oauthClient" },
             { in: "body", key: "authorizationServerIssuer" },
             { in: "body", key: "requestedScopes" },
