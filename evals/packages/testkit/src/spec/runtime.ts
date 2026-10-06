@@ -1110,6 +1110,7 @@ export class ProbeChannel implements Probe {
           urlContainsSecret: [location.href, ...performance.getEntriesByType("resource").map(entry => entry.name)].some(contains),
           historyContainsSecret: contains(JSON.stringify(history.state) ?? ""),
           storageContainsSecret: [...storageValues(localStorage), ...storageValues(sessionStorage)].some(contains),
+          consoleContainsSecret: contains(JSON.stringify(Reflect.get(window, "__nativeProofConsole") ?? []) ?? ""),
         };
       }, [selector, candidate]);
       if (!value || Object.values(value).some(field => typeof field !== "boolean" && typeof field !== "string" && field !== null)) {

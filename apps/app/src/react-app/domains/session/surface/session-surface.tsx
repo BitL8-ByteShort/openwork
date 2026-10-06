@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { openMemberApiKeyDialog } from "../../connections/member-api-key-dialog";
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { UIMessage } from "ai";
 import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -3169,6 +3170,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         connectionName: action.connectionName,
         listConnections: () => denClient.listMcpConnections(organizationId, "usable"),
         startConnect: () => denClient.startMcpConnectionConnect(organizationId, action.connectionId),
+        connectPersonalKey: () => openMemberApiKeyDialog(action.connectionId, { connectionName: action.connectionName, replacing: action.label === "Replace key" }),
         openUrl: openDesktopUrl,
         isCurrent: isAuthorizationCurrent,
         onProgress,

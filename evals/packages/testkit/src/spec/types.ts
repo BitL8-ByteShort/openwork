@@ -81,6 +81,7 @@ export interface CredentialInputState {
   urlContainsSecret: boolean;
   historyContainsSecret: boolean;
   storageContainsSecret: boolean;
+  consoleContainsSecret: boolean;
 }
 
 export interface Probe {
