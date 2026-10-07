@@ -8,12 +8,44 @@ description: Review a fork PR, review an external contributor PR, check DCO sign
 Use for every PR whose head is not in `different-ai/openwork`
 (`isCrossRepository: true`). Fork PRs get no automatic clearance: `warden.yml`
 skips them (`head.repo.full_name == github.repository`, no secrets on fork
-heads) and `warden-clearance.yml` refuses them. Nothing enforces DCO or the
-`ee/` CLA today either; two external commits were merged on 2026-09-09 without
-`Signed-off-by`. Open PRs #4733 (fork guard: DCO + `ee/` label status) and
-#4709 (DCO + EE CLA policy and status gate) will automate parts of this; this
-checklist does not depend on them and stays required after they land, because
-they gate the contributor, not the reviewer.
+heads) and `warden-clearance.yml` refuses them. The `ee/` CLA is accepted by
+contributing (CONTRIBUTING.md), so there is no CLA signature or label to
+enforce.
+
+`contributor-pr-required` (commit status) is the CI gate for contributor PRs.
+Everything below runs from dev and never executes PR code:
+
+- `contributor-pr.yml` (`pull_request_target`, every push): fails the status
+  on any commit without its author's `Signed-off-by` (and comments how to
+  fix it), fails it for forks that touch CI or agent configuration.
+- Then, for forks, the free screen (`contributor-warden.yml`, stage `scan`,
+  no model, no secrets) sets `contributor-pr/screen` and keeps one PR
+  comment. Nothing that costs money runs before your `/test`:
+  - **blocked** (red): hidden or look-alike characters, invalid UTF-8. The
+    contributor must fix it; `/test` refuses.
+  - **needs review** (yellow): dependency or lockfile changes, database
+    changes (`ee/packages/den-db/**`, `*.sql`, migration jobs), binaries,
+    encoded or obfuscated-looking lines, text aimed at an AI reviewer (in
+    the diff or commit messages; treat later Warden results on that commit
+    as unreliable). Read each listed item yourself before `/test`.
+  - **passed** (green): nothing flagged. Still review before `/test`.
+- After you finish this checklist, comment `/test` (binds the head as it was
+  when you commented) or `/test <sha>`. `contributor-pr-test.yml` checks you
+  have write access, the head hasn't moved, and the screen isn't blocked,
+  then runs the AI screen (Warden's `contributor-screen` skill, once per
+  commit, `contributor-pr/ai-screen`).
+  - **AI screen clear:** it approves the fork's waiting test runs, runs the
+    Warden security review (`contributor-pr/warden`), and passes
+    `contributor-pr-required` once Warden is clear and
+    `openwork-tests-required` (ci-tests.yml, no secrets) succeeds.
+  - **AI screen flagged or incomplete:** nothing else runs. Read the
+    findings in its PR comment; comment `/test` again to proceed anyway.
+  - A new push needs a new review and a new `/test`.
+- Fork tests run without secrets. The Freestyle, live and Windows proofs
+  still need the carry in section 6.
+
+The status gates the contributor, not the reviewer: this checklist is still
+required.
 
 Every item must be answered explicitly in the review comment. `Blocked` on any
 item means no approval and no merge.
@@ -26,7 +58,7 @@ gh pr view $N -R $R --json isCrossRepository,headRepositoryOwner,headRepository,
 
 ## 1. DCO: every commit carries Signed-off-by
 
-CONTRIBUTING.md section 1: every commit must certify the DCO with a
+CONTRIBUTING.md "Signing off commits": every commit must certify the DCO with a
 `Signed-off-by: Name <email>` trailer. Check every non-merge commit on the PR
 head, not just the last one:
 
@@ -46,24 +78,26 @@ gh api "repos/$R/pulls/$N/commits" --paginate \
   body, and the trailers of the original commits are lost. Fix the commits
   first.
 
-## 2. ee/ paths need a CLA on file
+## 2. ee/ paths are covered by the CLA notice
 
-CONTRIBUTING.md section 2: anything under `ee/` additionally needs an
-Individual or Corporate CLA. Renames out of `ee/` count.
+CONTRIBUTING.md (first section, same model as GitLab): contributing to `ee/`
+means the contributor is deemed to accept the Individual or Corporate CLA in
+`legal/`. There is no signature to collect and no label to apply. Renames out
+of `ee/` count as `ee/` changes.
 
 ```bash
-gh pr view $N -R $R --json files --jq '[.files[].path | select(startswith("ee/"))] | length'
-gh pr view $N -R $R --json labels --jq '[.labels[].name] | index("cla-signed") != null'
+gh pr view $N -R $R --json files --jq '[.files[].path | select(startswith("ee/"))]'
 ```
 
-- `ee/` files changed and no `cla-signed` label -> Blocked. Point to
-  `legal/individual-contributor-license-agreement.md` or
-  `legal/corporate-contributor-license-agreement.md`.
-- Only a maintainer applies `cla-signed`, and only after confirming the
-  signed agreement is on file privately. The label records that check; it is
-  not the check. Never apply it to unblock a PR.
-- Check the previous `ee/` commit inventory against the same contributor's
-  earlier PRs: the CLA covers the person or company, not the PR.
+- `ee/` files changed -> note it in the review comment so the record shows
+  the CLA applied. Not a blocker on its own.
+- Blocked if the PR body or commits say the contribution is "Not a
+  Contribution", is submitted on behalf of a third party, or otherwise
+  rejects the CLA terms. Ask the contributor to resolve it with
+  team@openworklabs.com first.
+- If the author is clearly contributing for an employer, mention the
+  Corporate CLA (`legal/corporate-contributor-license-agreement.md`) in the
+  review so they can confirm they are authorized.
 
 ## 3. Warden ran on the exact head being merged
 
@@ -173,3 +207,15 @@ Post one comment on the PR with the seven items above, each marked `OK`,
 `Blocked (why)`, or `N/A (why)`, plus the head SHA the review binds to. If
 the head changes after the comment, the review is stale; rerun sections 1,
 3, 4, and 5 before approving.
+
+If nothing is Blocked, bind the commit you read so `contributor-pr-required`
+can pass:
+
+```bash
+gh pr comment $N -R $R --body "/test $(gh pr view $N -R $R --json headRefOid --jq .headRefOid)"
+```
+
+Naming the SHA you read is the strict form; a plain `/test` comment binds the
+head as it was when you commented. The workflow replies on the PR if it
+refuses (no write access, head moved, missing sign-off, CI or agent
+configuration changed, screen blocked or not finished).
