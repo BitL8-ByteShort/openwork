@@ -153,6 +153,7 @@ export type AdminFeature = {
     | "slackAssistantHeadless"
     | "headlessAutomations"
     | "workbot"
+    | "workbotSideChats"
     | "litellm"
     | "gatewayCloudSignIn"
     | "platformAuditReads";
@@ -204,6 +205,7 @@ export type AdminOrganizationsPageResponse = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
       platformAuditReads: boolean;
@@ -300,6 +302,15 @@ export type AdminOrganizationsPageResponse = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotSideChats: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
@@ -408,6 +419,7 @@ export type AdminOverviewResponse = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
       platformAuditReads: boolean;
@@ -504,6 +516,15 @@ export type AdminOverviewResponse = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotSideChats: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
@@ -1657,6 +1678,7 @@ export type CapabilityDisabledError = {
     | "slackAssistantHeadless"
     | "headlessAutomations"
     | "workbot"
+    | "workbotSideChats"
     | "litellm"
     | "gatewayCloudSignIn"
     | "platformAuditReads";
@@ -4835,6 +4857,7 @@ export type WorkbotSession = {
   memberId: string;
   enabled: boolean;
   canSchedule: boolean;
+  sideChats: boolean;
 };
 
 export type WorkbotRunToken = {
@@ -5544,6 +5567,7 @@ export type GetV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
       platformAuditReads: boolean;
@@ -5640,6 +5664,15 @@ export type GetV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotSideChats: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
@@ -5736,6 +5769,7 @@ export type PutV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
       platformAuditReads: boolean;
@@ -5832,6 +5866,15 @@ export type PutV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotSideChats: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
