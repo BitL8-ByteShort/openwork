@@ -498,6 +498,8 @@ import type {
   ListGmailDraftsResponses,
   ListGmailLabelsErrors,
   ListGmailLabelsResponses,
+  ListWorkbotConnectionsErrors,
+  ListWorkbotConnectionsResponses,
   Microsoft365CalendarCancelBody,
   Microsoft365CalendarDeleteBody,
   Microsoft365CalendarEventBody,
@@ -14361,6 +14363,19 @@ export class DenClient extends HeyApiClient {
   }
 
   /**
+   * The everyday apps the person can connect for Workbot
+   *
+   * For the Workbot app only. The Gmail or Google Workspace, Slack and Microsoft 365 connections the organization's admins set up and this member may use, with whether each is ready for them, and where in Den they connect their own account.
+   */
+  public listWorkbotConnections<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      ListWorkbotConnectionsResponses,
+      ListWorkbotConnectionsErrors,
+      ThrowOnError
+    >({ url: "/v1/workbot/connections", ...options });
+  }
+
+  /**
    * A short-lived token for one Workbot turn
    *
    * For the Workbot app only. Mints the member-scoped MCP token a Workbot turn uses to reach the person's connected apps on the headless runner, for at most an hour. Refused when Workbot is off for the workspace.
@@ -14368,10 +14383,21 @@ export class DenClient extends HeyApiClient {
   public createWorkbotRunToken<ThrowOnError extends boolean = false>(
     parameters?: {
       ttlMs?: number;
+      readOnly?: boolean;
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "ttlMs" }] }]);
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "ttlMs" },
+            { in: "body", key: "readOnly" },
+          ],
+        },
+      ],
+    );
     return (options?.client ?? this.client).post<
       CreateWorkbotRunTokenResponses,
       CreateWorkbotRunTokenErrors,
