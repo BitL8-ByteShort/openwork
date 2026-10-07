@@ -5,6 +5,7 @@ import { normalizeDenTypeId } from "@openwork-ee/utils/typeid"
 import type { Hono } from "hono"
 import { describeRoute } from "hono-openapi"
 import { z } from "zod"
+import { cloudHostingAvailable } from "../../capability-sources/cloud-hosting.js"
 import { organizationFeatureEnabled } from "../../features.js"
 import { recordDesktopHandoffCreated, recordSessionHandedOff } from "../../audit/domain/sessions.js"
 import { attributeAuditRequest, auditSessionUserAttribution } from "../../audit/request-capture.js"
@@ -21,7 +22,7 @@ import { CLOUD_INSTANCE_BACKEND } from "../../workers/cloud-constants.js"
 const createGrantSchema = z.object({
   next: z.string().trim().max(128).optional().describe("Optional continuation hint for handoff clients."),
   desktopScheme: z.literal("openwork").optional().describe("The registered OpenWork desktop URL scheme."),
-  returnUrl: z.string().trim().max(2048).optional().describe("Optional HTTPS web return URL. Accepted only in multi-organization mode after server-side origin validation."),
+  returnUrl: z.string().trim().max(2048).optional().describe("Optional HTTPS web return URL, validated server-side. Accepted in multi-organization mode, and on single-organization installs with OpenWork Web on for the configured gateway origin only."),
 }).meta({ ref: "DesktopHandoffGrantCreateBody" })
 
 const exchangeGrantSchema = z.object({
@@ -217,8 +218,9 @@ function hasPathTraversal(pathname: string) {
 function resolveWebHandoffReturnUrlCandidate(input: {
   returnUrl: string
   orgMode: DenOrgMode
+  openworkWebEnabled?: boolean
 }): ApprovedWebHandoffReturnUrlCandidate | null {
-  if (input.orgMode !== "multi_org") {
+  if (!cloudHostingAvailable({ orgMode: input.orgMode, openworkWebEnabled: input.openworkWebEnabled === true })) {
     return null
   }
 
@@ -302,6 +304,7 @@ export function approveWebHandoffReturnUrl(input: {
   returnUrl: string
   signedPreviewUrl: string
   orgMode: DenOrgMode
+  openworkWebEnabled?: boolean
   gatewayOrigin?: string | null
 }) {
   const candidate = resolveWebHandoffReturnUrlCandidate(input)
@@ -324,6 +327,7 @@ export function approveWebHandoffReturnUrlForSignedPreviews(input: {
   returnUrl: string
   signedPreviewUrls: string[]
   orgMode: DenOrgMode
+  openworkWebEnabled?: boolean
   gatewayOrigin?: string | null
 }) {
   const candidate = resolveWebHandoffReturnUrlCandidate(input)
@@ -389,16 +393,20 @@ export async function resolveWebHandoffApproval(input: {
   userId?: string | null
   loadSignedPreviewUrls?: (organizationId: WorkerOrgId) => Promise<string[]>
 }): Promise<WebHandoffApproval | null> {
+  // The configured OpenWork Web gateway: multi-org, or a single-org install
+  // with OpenWork Web on (its own gateway is then the only web return origin).
   const gatewayReturnUrl = approveWebHandoffReturnUrlForSignedPreviews({
     returnUrl: input.returnUrl,
     signedPreviewUrls: [],
     orgMode: env.orgMode,
+    openworkWebEnabled: env.openworkWebEnabled,
     gatewayOrigin: env.gatewayOrigin,
   })
   if (gatewayReturnUrl) {
     return { returnUrl: gatewayReturnUrl, organizationId: null }
   }
 
+  // Organization-approved origins and sandbox preview origins stay multi-org only.
   if (env.orgMode !== "multi_org") {
     return null
   }
