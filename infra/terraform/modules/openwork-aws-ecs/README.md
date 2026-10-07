@@ -11,7 +11,7 @@ Runs a private, single-organization OpenWork control plane (Den) on AWS
 | Database migrations | Init container in each den-api task; den-api starts only if it succeeds |
 | MySQL 8.4 | RDS, encrypted, private (or bring your own `database_url`) |
 | Cache (optional) | ElastiCache Redis with TLS (`create_redis = true`) |
-| HTTPS | ALB: `domain_name` → den-web, `api.<domain_name>` → den-api, HTTP redirects |
+| HTTPS | ALB: `domain_name` → den-web, `api.<domain_name>` → den-api, HTTP redirects (or your existing ALB / listener) |
 | Certificate | Your ACM ARN, or created and DNS-validated in a Route 53 zone |
 | Secrets | One Secrets Manager secret, injected as ECS `secrets` |
 | Logs | CloudWatch `/ecs/<name>/den-api` and `/ecs/<name>/den-web` |
@@ -29,7 +29,7 @@ document every setting you can add through `extra_environment`.
 ## Before you start
 
 - A VPC with subnets in at least two AZs.
-  - **ALB**: public subnets (or private with `internal_alb = true`).
+  - **ALB**: public subnets (`alb_subnet_ids`, or private with `internal_alb = true`), or bring your own ALB / listener (`load_balancer_arn` or `alb_listener_arn`).
   - **Tasks**: private subnets with a NAT gateway (they pull images from
     `ghcr.io` and call model providers), or public subnets with
     `assign_public_ip = true`. To avoid `ghcr.io`, mirror the images to ECR
@@ -61,9 +61,10 @@ module "openwork" {
   database_subnet_ids = ["subnet-private-a", "subnet-private-b"]
 
   # Optional
-  ecs_cluster_arn = "arn:aws:ecs:us-east-1:123456789012:cluster/platform" # empty creates <name>-den
-  create_redis    = false
-  email_from   = "OpenWork <no-reply@example.com>"
+  ecs_cluster_arn       = "arn:aws:ecs:us-east-1:123456789012:cluster/platform" # empty creates <name>-den
+  create_redis          = false
+  wait_for_steady_state = true # apply waits until the new tasks are healthy
+  email_from            = "OpenWork <no-reply@example.com>"
   smtp = {
     host     = "email-smtp.us-east-1.amazonaws.com"
     username = var.ses_smtp_user
@@ -93,9 +94,30 @@ After `terraform apply`:
   services are named `den-api` and `den-web`, so they must not collide with
   services already in that cluster. They use `launch_type = "FARGATE"`,
   which overrides the cluster's default capacity provider strategy. The
-  module still creates its own Cloud Map namespace (`<name>.internal`), ALB,
-  security groups and IAM roles.
+  module still creates its own Cloud Map namespace (`<name>.internal`), ALB
+  (unless you bring one, below), security groups and IAM roles.
+- **Existing load balancer.** By default the module creates an ALB
+  (`<name>-den`) in `alb_subnet_ids`, a security group allowing 80/443 from
+  `allowed_ingress_cidrs` (or attaches `alb_security_group_id` instead), the
+  HTTPS and HTTP-redirect listeners, and, with `route53_zone_id`, DNS records
+  for both hostnames. To use a load balancer you already run, set
+  `alb_security_group_id` to its security group and one of:
+  - `alb_listener_arn`: an HTTPS listener, for example on a shared ALB. The
+    module adds host-header rules for `domain_name` and the API host
+    (`web_listener_rule_priority`, `api_listener_rule_priority`; pick
+    priorities that are free on that listener). Set
+    `attach_listener_certificate = true` unless the listener's certificates
+    already cover both hostnames.
+  - `load_balancer_arn`: an ALB with nothing on ports 80 and 443. The module
+    adds its own listeners to it.
 
+  In both cases the module creates no DNS records: point both hostnames at
+  your load balancer. `route53_zone_id` is then only used to validate a
+  certificate the module creates.
+- **Wait for steady state.** With `wait_for_steady_state = true`,
+  `terraform apply` waits until the new tasks pass health checks and the old
+  ones drain, so a crash or failed migration fails the apply. The default
+  (`false`) returns as soon as ECS accepts the update.
 - **Migrations** run in each den-api task before the app starts, like the Helm
   chart's pre-upgrade Job. They are idempotent but not locked, so keep
   `den_api.desired_count = 1` until you need more, and scale after a deploy

@@ -12,20 +12,9 @@ variable "vpc_id" {
   type        = string
 }
 
-variable "alb_subnet_ids" {
-  description = "Subnets for the load balancer (public subnets for an internet-facing ALB). At least two AZs."
-  type        = list(string)
-}
-
 variable "service_subnet_ids" {
   description = "Subnets for the Fargate tasks. Private subnets need a NAT gateway or VPC endpoints to pull images from ghcr.io; public subnets need assign_public_ip = true."
   type        = list(string)
-}
-
-variable "database_subnet_ids" {
-  description = "Subnets for RDS and ElastiCache. At least two AZs. Ignored when create_database = false and create_redis = false."
-  type        = list(string)
-  default     = []
 }
 
 variable "owner_emails" {
@@ -36,6 +25,68 @@ variable "owner_emails" {
     condition     = length(var.owner_emails) > 0
     error_message = "Set at least one owner email so the first administrator can be created."
   }
+}
+
+# ---------------------------------------------------------------------------
+# Load Balancer
+# ---------------------------------------------------------------------------
+
+variable "load_balancer_arn" {
+  description = "ARN of an existing Application Load Balancer. The module adds its HTTPS (443) and HTTP (80) listeners to it, so the ALB must not already listen on those ports; for a shared ALB, use alb_listener_arn instead. Requires alb_security_group_id. Empty creates an ALB (<name>-den) in alb_subnet_ids."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.load_balancer_arn == "" || can(regex("^arn:aws[a-z-]*:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:loadbalancer/app/.+$", var.load_balancer_arn))
+    error_message = "load_balancer_arn must be a full Application Load Balancer ARN (arn:aws:elasticloadbalancing:<region>:<account>:loadbalancer/app/<name>/<id>) or empty."
+  }
+}
+
+variable "alb_subnet_ids" {
+  description = "Subnets for the load balancer (public subnets for an internet-facing ALB). At least two AZs. Required when creating an ALB (load_balancer_arn is empty)."
+  type        = list(string)
+  default     = []
+}
+
+variable "internal_alb" {
+  description = "Create an internal ALB, reachable only inside the VPC (VPN/private network deployments). Used when creating an ALB."
+  type        = bool
+  default     = false
+}
+
+variable "alb_listener_arn" {
+  description = "ARN of an existing ALB HTTPS listener (for example on a shared ALB). The module adds host-header rules for domain_name and the API host to it instead of creating listeners, and creates no DNS records. Takes precedence over load_balancer_arn. Requires alb_security_group_id."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.alb_listener_arn == "" || can(regex("^arn:aws[a-z-]*:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:listener/app/.+$", var.alb_listener_arn))
+    error_message = "alb_listener_arn must be a full ALB listener ARN (arn:aws:elasticloadbalancing:<region>:<account>:listener/app/<name>/<id>/<id>) or empty."
+  }
+}
+
+variable "alb_security_group_id" {
+  description = "Security group of the load balancer. Required with load_balancer_arn or alb_listener_arn so the tasks accept traffic from it. When the module creates the ALB, empty creates a security group allowing 80/443 from allowed_ingress_cidrs; set it to attach your own instead."
+  type        = string
+  default     = ""
+}
+
+variable "api_listener_rule_priority" {
+  description = "Priority of the den-api host rule on the HTTPS listener. Must be unique on that listener; change it when using alb_listener_arn on a listener that already has rules."
+  type        = number
+  default     = 10
+}
+
+variable "web_listener_rule_priority" {
+  description = "Priority of the den-web host rule, created only with alb_listener_arn. Must be unique on that listener."
+  type        = number
+  default     = 20
+}
+
+variable "attach_listener_certificate" {
+  description = "With alb_listener_arn, also add the certificate (certificate_arn, or the one the module creates) to that listener. Leave false when the listener's certificates already cover both hostnames."
+  type        = bool
+  default     = false
 }
 
 # ---------------------------------------------------------------------------
@@ -123,12 +174,6 @@ variable "route53_zone_id" {
   description = "Route 53 hosted zone for both hostnames. When set, the module creates alias records and, if certificate_arn is empty, the ACM certificate. Leave empty when DNS is elsewhere; point both names at the alb_dns_name output."
   type        = string
   default     = ""
-}
-
-variable "internal_alb" {
-  description = "Create an internal ALB, reachable only inside the VPC (VPN/private network deployments)."
-  type        = bool
-  default     = false
 }
 
 variable "allowed_ingress_cidrs" {
@@ -260,6 +305,12 @@ variable "create_database" {
   default     = true
 }
 
+variable "database_subnet_ids" {
+  description = "Subnets for RDS and ElastiCache. At least two AZs. Ignored when create_database = false and create_redis = false."
+  type        = list(string)
+  default     = []
+}
+
 variable "database_url" {
   description = "mysql:// URL of an existing database. Used only when create_database = false."
   type        = string
@@ -318,6 +369,12 @@ variable "den_web" {
     desired_count = optional(number, 1)
   })
   default = {}
+}
+
+variable "wait_for_steady_state" {
+  description = "Whether to wait for the ECS services to reach a steady state before completing terraform apply. When true, terraform blocks until tasks pass health checks and old tasks drain."
+  type        = bool
+  default     = false
 }
 
 variable "log_retention_days" {
