@@ -1,12 +1,7 @@
 import { defineConfig } from "tsup"
 
 export default defineConfig({
-  entry: {
-    index: "src/index.ts",
-    "bootstrap/index": "src/bootstrap/index.ts",
-    "orchestrator/index": "src/orchestrator/index.ts",
-    "testing/index": "src/testing/index.ts",
-  },
+  entry: { index: "src/index.ts" },
   format: ["esm"],
   dts: true,
   clean: true,
@@ -15,4 +10,5 @@ export default defineConfig({
   sourcemap: false,
   splitting: false,
   treeshake: true,
+  external: ["@openwork/sandbox", "@daytonaio/sdk"],
 })
