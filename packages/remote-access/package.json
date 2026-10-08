@@ -17,10 +17,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ajv": "8.17.1",
+    "@openwork/features": "workspace:*",
+    "ajv": "8.20.0",
     "fastify": "5.12.5",
-    "qrcode": "1.5.4",
-    "@openwork/features": "workspace:*"
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
