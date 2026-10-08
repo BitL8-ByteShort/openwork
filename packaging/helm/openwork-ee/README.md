@@ -329,7 +329,7 @@ OpenWork Cloud. Don't change it on a customer install.
 <!-- BEGIN GENERATED features (pnpm features:sync) -->
 | `config.features.*` | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
-| `remoteAccess` | `DEN_FEATURE_REMOTE_ACCESS` | default off | Pair a phone to continue this computer's chats with explicit project access. |
+| `remoteAccess` | `DEN_FEATURE_REMOTE_ACCESS` | default off | Pair a phone to continue and rename this computer's chats with explicit project access. |
 | `installLinks` | `DEN_FEATURE_INSTALL_LINKS` | default on | Workspace admins can create desktop install links for their organization. |
 | `mcpConnections` | `DEN_FEATURE_MCP_CONNECTIONS` | default on | Members see the organization's connections, marketplace capabilities on the agent rail, and the desktop Connect tab. |
 | `implicitCloudSkills` | `DEN_FEATURE_IMPLICIT_CLOUD_SKILLS` | default off | Agents discover organization skills automatically without waiting for Cloud before starting a task. |

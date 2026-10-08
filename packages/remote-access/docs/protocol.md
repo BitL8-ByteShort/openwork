@@ -25,3 +25,11 @@ Use a fresh UUID `requestId` per intentional mutation and keep it until a receip
 SSE contains normalized events, supports bounded replay, and requests a snapshot refresh when replay is no longer available. Workspaces outside the phone's current grant never enter the stream. Access changes terminate active streams so reconnect uses the new grant.
 
 Prompts are limited to 32 KiB, request bodies to 40 KiB, and normalized snapshots to 8 MiB. Unknown content blocks render as a computer-only placeholder rather than raw HTML or upstream JSON. This protocol is intentionally smaller than OpenWork's local server API.
+
+### Rename an existing chat
+
+Hosts may advertise optional `capabilities.renameSession`. Clients connected to older hosts must keep Rename unavailable.
+
+`POST /v1/workspaces/:wid/sessions/:sid/rename` accepts only `requestId` (UUID), `title` (trimmed, 1–200 Unicode scalar values), and `previousTitle` (the last observed title). It uses the same device/project/session authorization and durable mutation ledger as other writes. A changed title detected before forwarding returns 409; this is a best-effort stale-edit check, not an upstream atomic compare-and-swap. A duplicate request ID returns its retained receipt. The adapter sends only the title to the existing OpenCode v2 rename action and never retries a failed write. Clients read the session back to confirm the title, including after an uncertain response.
+
+Renaming remains inside the default-off `remoteAccess` feature on cloud and self-hosted deployments. Turning Remote access off removes the entire phone surface and preserves chat names and existing data.

@@ -46,3 +46,9 @@ Design references: P1 state, P3 collapsed diagnostics, P4 visible locked policy,
 ## Release limits
 
 OpenCode v2 chat routing is required; disabled or stopped engines produce a recovery message without modifying engine settings. Only the described macOS and Ubuntu desktop environments have live evidence. Windows, headless hosts, other Linux distributions/architectures, full physical-phone/cellular coverage, signed desktop packages and iOS distribution remain outside this qualification. Deployment administrators must explicitly roll out `remoteAccess` before packaged clients can use it.
+
+## Chat rename follow-up — October 8, 2026
+
+The existing native v2 rename route passed against the modified desktop on macOS arm64 and Ubuntu Linux x64. Each check used an existing disposable qualification chat, changed its title, read it back, restored its original title, and verified unchanged message content and model selection. Both integrated desktops restarted with the updated bridge while retaining host identity, device grants and the mutation ledger; the admin HTTP port remained closed.
+
+The remote-access suite has 48 passing tests on each OS. Rename cases cover authorized updates, receipt replay, invalid titles, missing/out-of-scope sessions, stale titles and lost-response non-retry. The 21 desktop manager/network/policy tests still pass. This is host and Simulator evidence; physical iPhone rename acceptance remains separate.

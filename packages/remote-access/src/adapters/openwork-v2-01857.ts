@@ -185,6 +185,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       ...this.capabilities,
       events: supported,
       createSession: supported && this.qualifiedWrites,
+      renameSession: supported && this.qualifiedWrites,
       sendText: supported && this.qualifiedWrites,
       stop: supported && this.qualifiedWrites,
       replyApproval: supported && this.qualifiedWrites,
@@ -235,6 +236,15 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     const s = this.session(j.data, wid);
     if (s.id !== sid) throw new BridgeError("NOT_FOUND", 404);
     return s;
+  }
+  async rename(wid: string, sid: string, title: string, previousTitle: string) {
+    if (!this.capabilities.renameSession)
+      throw new PreflightError("UNSUPPORTED_ACTION", 422);
+    const current = await this.readSession(wid, sid);
+    if (current.title === title) return;
+    if (current.title !== previousTitle)
+      throw new PreflightError("STALE_TITLE", 409);
+    await this.request(`${this.base(wid)}/session/${safeId(sid)}/rename`, "POST", { title });
   }
   async readMessages(wid: string, sid: string, cursor?: string) {
     const q = new URLSearchParams({

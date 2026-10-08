@@ -22,6 +22,7 @@ export interface Capabilities {
   maxPromptBytes: number;
   protocolVersion: number;
   modelSettings?: boolean;
+  renameSession?: boolean;
   savedPermissions?: boolean;
 }
 export interface ModelSelection {

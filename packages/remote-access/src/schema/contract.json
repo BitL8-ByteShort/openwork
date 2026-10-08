@@ -53,6 +53,7 @@
         "protocolVersion": {
           "const": 1
         },
+        "renameSession": { "type": "boolean" },
         "modelSettings": {
           "type": "boolean"
         },

@@ -225,6 +225,27 @@ export function createServers(o: Options) {
     const page = await o.adapter.readMessages(wid, sid, req.query.cursor);
     return envelope(page.data, page.cursor);
   });
+  remote.post<{ Params: { wid: string; sid: string } }>(
+    "/v1/workspaces/:wid/sessions/:sid/rename",
+    async (req) => {
+      const { wid, sid } = req.params;
+      await session(req, wid, sid);
+      if (!o.adapter.capabilities.renameSession)
+        throw new BridgeError("UNSUPPORTED_ACTION", 422);
+      const b = body(req.body, ["requestId", "title", "previousTitle"]);
+      const id = requestId({ requestId: b.requestId });
+      if (typeof b.title !== "string" || !b.title.trim() ||
+          Array.from(b.title.trim()).length > 200 ||
+          typeof b.previousTitle !== "string" || Array.from(b.previousTitle).length > 4096)
+        throw new BridgeError("INVALID_REQUEST", 400);
+      const title = b.title.trim(), previousTitle = b.previousTitle;
+      return envelope(await ledger.perform(device(req).id, id, req.url,
+        { wid, sid, title, previousTitle }, async () => {
+          await o.adapter.rename(wid, sid, title, previousTitle);
+          return sid;
+        }));
+    },
+  );
   remote.get<{ Params: { wid: string; sid: string } }>(
     "/v1/workspaces/:wid/sessions/:sid/status",
     async (req) => {
