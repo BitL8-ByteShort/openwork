@@ -121,6 +121,11 @@ The runner is a private service with one caller (Den), which authorizes each per
 - **Image:** the snapshot is built from the package's install script: `pnpm --filter @openwork-ee/headless-computer snapshot:build`.
 - Every file under `memory/` in the scratch workspace is shown to the model at the start of each turn, so long-term memory survives older turns dropping out of context
 
+## Run on celld (no disk)
+
+The same runner also runs on celld, one SQLite cell per Workbot person or per Slack/Automation conversation, kept
+in an S3 bucket instead of a disk: [OWNER-CELLS.md](./OWNER-CELLS.md).
+
 ## Configuration
 
 | Variable | Default | |
