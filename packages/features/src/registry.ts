@@ -130,6 +130,20 @@ export const FEATURES = defineFeatures({
     deployments: everywhere,
     default: false,
   },
+  automationCalendar: {
+    label: "Calendar: desktop app",
+    description: "Members see a Calendar in the desktop app with their Automations next to meetings from their connected Google or Outlook calendar.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
+  workbotCalendar: {
+    label: "Calendar: Workbot",
+    description: "Workbot members see a Calendar tab with Workbot's scheduled work next to meetings from their connected Google or Outlook calendar. Needs Workbot.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
   workbotSideChats: {
     label: "Workbot: side chats",
     description: "Members can start side chats in Workbot next to their main chat, for one topic at a time. Needs Workbot.",

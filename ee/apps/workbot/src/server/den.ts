@@ -26,6 +26,8 @@ export const denSessionSchema = z.object({
   memberId: z.string(),
   enabled: z.boolean(),
   canSchedule: z.boolean(),
+  /** Workbot's Calendar tab is on (Workbot and workbotCalendar). Older Dens omit it: off. */
+  calendar: z.boolean().optional(),
   /** Side chats are on for this person. A Den from before side chats doesn't say: off. */
   sideChats: z.boolean().default(false),
 })
@@ -104,7 +106,7 @@ export function createDen(options: { apiUrl: string; publicUrl: string }) {
     }
   }
 
-  const authorized = async (method: "GET" | "POST", path: string, accessToken: string, body?: unknown) => {
+  const authorized = async (method: "GET" | "POST" | "PATCH", path: string, accessToken: string, body?: unknown) => {
     const response = await fetch(`${options.apiUrl}${path}`, {
       method,
       headers: { authorization: `Bearer ${accessToken}`, accept: "application/json", ...(body ? { "content-type": "application/json" } : {}) },
@@ -166,6 +168,13 @@ export function createDen(options: { apiUrl: string; publicUrl: string }) {
       const parsed = workbotConnectionsSchema.safeParse(payload)
       if (status !== 200 || !parsed.success) throw new Error(`den_connections_${status}`)
       return parsed.data.connections
+    },
+    /**
+     * One request Workbot's Calendar makes for the person (their Automations, runs and calendar meetings), through
+     * Den's allowlisted `/v1/workbot/calendar/*`. Den's status and body come back as they are.
+     */
+    async calendar(accessToken: string, input: { method: "GET" | "POST" | "PATCH"; path: string; body?: unknown }) {
+      return authorized(input.method, `/v1/workbot/calendar${input.path}`, accessToken, input.body)
     },
     /** Den's web app, from its sign-in issuer, for links back to OpenWork and app logos. */
     async webUrl() {

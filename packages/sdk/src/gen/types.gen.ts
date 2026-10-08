@@ -154,6 +154,8 @@ export type AdminFeature = {
     | "slackAssistantHeadless"
     | "headlessAutomations"
     | "workbot"
+    | "automationCalendar"
+    | "workbotCalendar"
     | "workbotSideChats"
     | "litellm"
     | "gatewayCloudSignIn"
@@ -207,6 +209,8 @@ export type AdminOrganizationsPageResponse = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      automationCalendar: boolean;
+      workbotCalendar: boolean;
       workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
@@ -313,6 +317,24 @@ export type AdminOrganizationsPageResponse = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      automationCalendar: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotCalendar: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
@@ -431,6 +453,8 @@ export type AdminOverviewResponse = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      automationCalendar: boolean;
+      workbotCalendar: boolean;
       workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
@@ -537,6 +561,24 @@ export type AdminOverviewResponse = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      automationCalendar: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotCalendar: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
@@ -987,6 +1029,11 @@ export type AutomationOpenWorkWebAccessRequiredError = {
 };
 
 export type AutomationRunList = {
+  items: Array<AutomationRun>;
+  nextCursor: string | null;
+};
+
+export type AutomationRunRange = {
   items: Array<AutomationRun>;
   nextCursor: string | null;
 };
@@ -1700,6 +1747,8 @@ export type CapabilityDisabledError = {
     | "slackAssistantHeadless"
     | "headlessAutomations"
     | "workbot"
+    | "automationCalendar"
+    | "workbotCalendar"
     | "workbotSideChats"
     | "litellm"
     | "gatewayCloudSignIn"
@@ -4879,6 +4928,7 @@ export type WorkbotSession = {
   memberId: string;
   enabled: boolean;
   canSchedule: boolean;
+  calendar?: boolean;
   sideChats: boolean;
 };
 
@@ -5590,6 +5640,8 @@ export type GetV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      automationCalendar: boolean;
+      workbotCalendar: boolean;
       workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
@@ -5696,6 +5748,24 @@ export type GetV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      automationCalendar: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotCalendar: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
@@ -5802,6 +5872,8 @@ export type PutV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
       slackAssistantHeadless: boolean;
       headlessAutomations: boolean;
       workbot: boolean;
+      automationCalendar: boolean;
+      workbotCalendar: boolean;
       workbotSideChats: boolean;
       litellm: boolean;
       gatewayCloudSignIn: boolean;
@@ -5908,6 +5980,24 @@ export type PutV1AdminOrganizationsByOrganizationIdCapabilitiesResponses = {
         overrideApplies: boolean;
       };
       workbot: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      automationCalendar: {
+        enabled: boolean;
+        source: "unavailable" | "killed" | "lock" | "override" | "everyone";
+        everyone: boolean;
+        killed: boolean;
+        lock: boolean | null;
+        override: boolean | null;
+        overrideApplies: boolean;
+      };
+      workbotCalendar: {
         enabled: boolean;
         source: "unavailable" | "killed" | "lock" | "override" | "everyone";
         everyone: boolean;
@@ -8152,6 +8242,53 @@ export type ListAutomationRunsResponses = {
 };
 
 export type ListAutomationRunsResponse = ListAutomationRunsResponses[keyof ListAutomationRunsResponses];
+
+export type ListAutomationRunsInRangeData = {
+  body?: never;
+  path?: never;
+  query: {
+    /**
+     * Inclusive lower bound, epoch milliseconds.
+     */
+    from: number;
+    /**
+     * Exclusive upper bound, epoch milliseconds.
+     */
+    to: number;
+    /**
+     * nextCursor from the previous page.
+     */
+    cursor?: string;
+    /**
+     * Maximum runs to scan for this page (default 200).
+     */
+    limit?: number;
+  };
+  url: "/v1/automation-runs";
+};
+
+export type ListAutomationRunsInRangeErrors = {
+  /**
+   * Invalid request.
+   */
+  400: InvalidRequestError;
+  /**
+   * Sign-in required.
+   */
+  401: UnauthorizedError;
+};
+
+export type ListAutomationRunsInRangeError = ListAutomationRunsInRangeErrors[keyof ListAutomationRunsInRangeErrors];
+
+export type ListAutomationRunsInRangeResponses = {
+  /**
+   * Runs in the range returned.
+   */
+  200: AutomationRunRange;
+};
+
+export type ListAutomationRunsInRangeResponse =
+  ListAutomationRunsInRangeResponses[keyof ListAutomationRunsInRangeResponses];
 
 export type GetAutomationRunData = {
   body?: never;

@@ -47,6 +47,15 @@ const execFileAsync = promisify(execFile);
 /** `--live`: a real model, the computer on, and an MCP App seeded. Local placement only. */
 export type WorkbotWorldOptions = {
   live: boolean;
+  /**
+   * `--calendar`: seed the owner's Automations and runs, turn on the desktop and Workbot Calendars, and read
+   * meetings from the calendar mock (worlds/lib/calendar.ts).
+   */
+  calendar?: boolean;
+  /** Extra Den settings (e.g. provider base URLs a spec points at a mock). */
+  denEnv?: Record<string, string>;
+  /** Workbot reads meetings from this calendar mock instead of Den (WORKBOT_CALENDAR_MOCK_URL). */
+  workbotCalendarMockUrl?: string;
   upstream?: { baseUrl: string; key: string; model: string };
   runnerProxy?: (runnerUrl: string) => Promise<string>;
   /** Extra runner settings, for example a small HEADLESS_CONTEXT_CHAR_BUDGET so a short journey outgrows the context. */
@@ -56,8 +65,8 @@ export type WorkbotWorldOptions = {
 };
 
 export function parseWorkbotOptions(argv: string[]): WorkbotWorldOptions {
-  for (const arg of argv) if (arg !== "--live") throw new Error(`preview-workbot: unknown option ${arg} (supported: --live)`);
-  return { live: argv.includes("--live") };
+  for (const arg of argv) if (arg !== "--live" && arg !== "--calendar") throw new Error(`preview-workbot: unknown option ${arg} (supported: --live, --calendar)`);
+  return { live: argv.includes("--live"), calendar: argv.includes("--calendar") };
 }
 
 /** A secret from the caller's environment, else the team's dev Infisical; never printed. */
@@ -213,7 +222,7 @@ export async function bootWorkbot(stack: AsyncDisposableStack, preview?: { den: 
   const workbotUrl = preview?.workbot ?? workbotInternal;
   const secrets = { runnerToken: token(), sessionSecret: token(), upstreamKey: runner.upstreamKey };
   const den = stack.use(await server({
-    place, web: true, seedProfile: "demo-org",
+    place, web: true, seedProfile: "demo-org", seedAutomations: options.calendar === true,
     env: {
       DEN_WORKBOT_URL: workbotUrl, DEN_HEADLESS_RUNNER_URL: runnerUrl, DEN_HEADLESS_RUNNER_TOKEN: secrets.runnerToken,
       RESEND_API_KEY: "", SMTP_HOST: "",
@@ -222,6 +231,7 @@ export async function bootWorkbot(stack: AsyncDisposableStack, preview?: { den: 
       DEN_AUTH_COOKIE_PREFIX: `openwork-den-${randomBytes(4).toString("hex")}`,
       // Eval Dens leave Apps built in OpenWork off; --live seeds one, as production has them on.
       ...(options.live ? { DEN_APP_MCP_SERVERS_ENABLED: "true" } : {}),
+      ...options.denEnv,
       ...(preview ? {
         DEN_WEB_ALLOWED_DEV_ORIGINS: new URL(preview.den).hostname,
         NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${PREVIEW_EGRESS}`].filter(Boolean).join(" "),
@@ -255,6 +265,7 @@ export async function bootWorkbot(stack: AsyncDisposableStack, preview?: { den: 
       PORT: String(workbotPort), WORKBOT_PUBLIC_URL: workbotUrl, WORKBOT_DEN_API_URL: den.ref.apiUrl,
       WORKBOT_DEN_WEB_URL: preview?.den ?? den.ref.webUrl, WORKBOT_RUNNER_URL: options.runnerProxy ? await options.runnerProxy(runnerUrl) : runnerUrl, WORKBOT_RUNNER_TOKEN: secrets.runnerToken,
       WORKBOT_SESSION_SECRET: secrets.sessionSecret, WORKBOT_DB_PATH: join(data, "workbot.sqlite"),
+      ...(options.workbotCalendarMockUrl ? { WORKBOT_CALENDAR_MOCK_URL: options.workbotCalendarMockUrl } : {}),
       ...(preview ? {
         // Workbot reaches Den's sign-in at its advertised (template) origin; inside the VM that is loopback.
         NODE_OPTIONS: `--import=${PREVIEW_LOOPBACK}`,
@@ -262,7 +273,8 @@ export async function bootWorkbot(stack: AsyncDisposableStack, preview?: { den: 
       } : {}),
     },
   });
-  const orgId = await enableWorkbot(den, options.features);
+  // --calendar turns on both Calendars (desktop and Workbot), each behind its own feature.
+  const orgId = await enableWorkbot(den, { ...options.features, ...(options.calendar ? { automationCalendar: true, workbotCalendar: true } : {}) });
   // The Acme team's apps (in memory), so Workbot has a real-looking calendar, inbox and Slack to read.
   const demo = await bootDemoWorkspace(stack, den);
   await connectDemoWorkspace(den, demo);

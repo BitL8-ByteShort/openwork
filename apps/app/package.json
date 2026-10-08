@@ -42,6 +42,7 @@
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@opencode-ai/sdk": "^1.18.15",
     "@openwork/browser-tabs": "workspace:*",
+    "@openwork/calendar": "workspace:*",
     "@openwork/install-config": "workspace:*",
     "@openwork/types": "workspace:*",
     "@openwork/ui": "workspace:*",
