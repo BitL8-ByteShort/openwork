@@ -119,6 +119,13 @@ export const INFERENCE_MODEL_ALIASES = {
     enabled: true,
     usageFactor: 1,
   },
+  // The model behind free Auto, on the organization's own usage.
+  "openai/gpt-6-luna": {
+    upstreamModel: "openai/gpt-6-luna",
+    displayName: "OpenWork: GPT-6 Luna",
+    enabled: true,
+    usageFactor: 1,
+  },
 } as const;
 
 export type InferenceModelAlias = keyof typeof INFERENCE_MODEL_ALIASES;
