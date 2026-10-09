@@ -1,4 +1,4 @@
-import { open, mkdir, lstat, readFile, rename, unlink } from "node:fs/promises";
+import { open, mkdir, lstat, realpath, readFile, rename, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -9,6 +9,7 @@ import {
   type DeviceFeatureGrants,
 } from "../contract/index.js";
 import { normalizeFeatureGrants } from '../auth/feature-access.js';
+import { validUpload, type UploadRecord } from '../transfers/metadata.js';
 export interface Device {
   id: string;
   deviceId: string;
@@ -33,6 +34,7 @@ export interface State {
   displayName: string;
   devices: Device[];
   ledger: Record<string, LedgerRecord>;
+  uploads?: Record<string, UploadRecord>;
 }
 function valid(s: unknown): s is State {
   if (
@@ -46,6 +48,7 @@ function valid(s: unknown): s is State {
   )
     return false;
   if (s.devices.length > 1000) return false;
+  if (s.uploads !== undefined && (!record(s.uploads) || Object.entries(s.uploads).some(([id, upload]) => !validUpload(id, upload)))) return false;
   try { for (const device of s.devices) normalizeFeatureGrants(record(device) ? device.features : null); }
   catch { return false; }
   return (
@@ -111,6 +114,7 @@ export class Store {
   get snapshot(): State {
     return structuredClone(this.data);
   }
+  get directory(): string { return this.root; }
   static async read(root: string): Promise<State | null> {
     try {
       await privatePath(root, true);
@@ -129,6 +133,7 @@ export class Store {
   static async open(root: string) {
     await mkdir(root, { recursive: true, mode: 0o700 });
     await privatePath(root, true);
+    root = await realpath(root);
     const lockPath = join(root, "lock");
     let lock: FileHandle;
     try {
@@ -174,6 +179,8 @@ export class Store {
       const store = new Store(root, state, lock);
       await store.update((s) => {
         for (const d of s.devices) if (!d.active) d.revoked = true;
+        for (const upload of Object.values(s.uploads ?? {}))
+          if (upload.state === 'committing') upload.state = 'outcome_unknown';
         for (const r of Object.values(s.ledger))
           if (r.receipt.state === "pending")
             r.receipt = {

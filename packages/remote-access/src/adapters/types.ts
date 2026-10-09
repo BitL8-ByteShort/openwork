@@ -41,6 +41,17 @@ export interface OpenWorkAdapter {
     answers: QuestionAnswers | null,
     signal?: AbortSignal,
   ): Promise<void>;
+  readAttachmentLimits?(
+    wid: string,
+    sid: string,
+    signal?: AbortSignal,
+  ): Promise<{ maxFileBytes: number; inputMIMEs: string[] }>;
+  uploadAttachment?(
+    wid: string,
+    sid: string,
+    file: { id: string; path: string; name: string; mime: string; bytes: number },
+    signal: AbortSignal,
+  ): Promise<{ uri: string }>;
   create(wid: string): Promise<string>;
   rename(
     wid: string,
