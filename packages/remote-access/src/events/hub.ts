@@ -7,6 +7,7 @@ export class EventHub {
   private controller = new AbortController();
   private listeners = new Set<(event: BridgeEvent) => void>();
   private tasks: Promise<void>[] = [];
+  private readers = new Set<ReadableStreamDefaultReader<Uint8Array>>();
   private tracked = new Set<string>();
   private discoveryTimer?: NodeJS.Timeout;
   constructor(private adapter: OpenWorkAdapter) {}
@@ -40,6 +41,13 @@ export class EventHub {
       try {
         await this.adapter.health();
         const r = await this.adapter.subscribe(wid, signal);
+        const reader = r.body!.getReader();
+        if (signal.aborted) {
+          void reader.cancel().catch(() => {});
+          reader.releaseLock();
+          return;
+        }
+        this.readers.add(reader);
         this.emit(
           this.buffer.append(
             { kind: "hostChanged", workspaceId: wid },
@@ -47,8 +55,7 @@ export class EventHub {
           ),
         );
         failures = 0;
-        const parser = new SSEParser(),
-          reader = r.body!.getReader();
+        const parser = new SSEParser();
         try {
           for (;;) {
             const x = await reader.read();
@@ -67,7 +74,11 @@ export class EventHub {
             }
           }
         } finally {
-          await reader.cancel().catch(() => {});
+          this.readers.delete(reader);
+          // Cancel the owned read as well as the fetch signal. An upstream
+          // cancellation promise must not retain the bridge's state lock.
+          void reader.cancel().catch(() => {});
+          reader.releaseLock();
         }
       } catch {
         if (!signal.aborted)
@@ -95,6 +106,7 @@ export class EventHub {
   async close() {
     clearInterval(this.discoveryTimer);
     this.controller.abort();
+    for (const reader of this.readers) void reader.cancel().catch(() => {});
     await Promise.allSettled(this.tasks);
     this.listeners.clear();
   }
