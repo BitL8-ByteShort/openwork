@@ -553,6 +553,10 @@ export function getModelsAnalyticsRoute(orgSlug?: string | null): string {
   return `${getAnalyticsRoute(orgSlug)}/models`;
 }
 
+export function getSkillUsageRoute(orgSlug?: string | null): string {
+  return `${getAnalyticsRoute(orgSlug)}/skills`;
+}
+
 export function getMembersRoute(orgSlug?: string | null): string {
   return `${getOrgDashboardRoute(orgSlug)}/members`;
 }
