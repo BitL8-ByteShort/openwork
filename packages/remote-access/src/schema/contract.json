@@ -1411,6 +1411,37 @@
           "pattern": "^[a-f0-9]{64}$"
         }
       }
+    },
+    "SessionSearchPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/SessionList"
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "maxLength": 36
+        },
+        "scanned": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "data",
+        "cursor",
+        "scanned",
+        "complete"
+      ]
     }
   }
 }

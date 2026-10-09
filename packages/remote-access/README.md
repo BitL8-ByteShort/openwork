@@ -62,3 +62,5 @@ The qualified source candidate also supports passive [Workspace changes](docs/ch
 The qualified source candidate adds [granular chat groups](docs/groups.md) inside approved projects. Group removal keeps the chats; whole-state replacement and automatic retries are unavailable.
 
 Chat copy/delete behavior, recovery and limits: [Chat actions](docs/session-actions.md).
+
+Older title search, coverage and data flow: [Title search](docs/title-search.md).
