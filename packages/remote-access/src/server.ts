@@ -14,8 +14,13 @@ import {
 import type { OpenWorkAdapter } from "./adapters/types.js";
 import { Store, type Device } from "./storage/store.js";
 import { Pairing } from "./auth/pairing.js";
-import { FeatureOperations, normalizeFeatureGrants, authorizeWorkspace } from './auth/feature-access.js';
+import {
+  FeatureOperations,
+  normalizeFeatureGrants,
+  authorizeWorkspace,
+} from "./auth/feature-access.js";
 import { Ledger } from "./mutations/ledger.js";
+import { registerQuestionRoutes } from "./routes/questions.js";
 import { adminHTML, adminJS, adminCSS } from "./admin/public.js";
 interface Options {
   store: Store;
@@ -40,7 +45,9 @@ export function createServers(o: Options) {
   const hub = new EventHub(o.adapter);
   const devices = new WeakMap<FastifyRequest, Device>();
   const streams = new Map<string, Set<() => void>>();
-  const featureOperations = new FeatureOperations(id => o.store.snapshot.devices.find(d => d.id === id));
+  const featureOperations = new FeatureOperations((id) =>
+    o.store.snapshot.devices.find((d) => d.id === id),
+  );
   const host = (): Host =>
     assertContract("Host", {
       hostId: o.store.snapshot.hostId,
@@ -138,7 +145,7 @@ export function createServers(o: Options) {
   };
   const scope = (req: FastifyRequest, wid: string) => {
     const d = device(req);
-    return authorizeWorkspace(d,wid);
+    return authorizeWorkspace(d, wid);
   };
   const session = async (req: FastifyRequest, wid: string, sid: string) => {
     scope(req, wid);
@@ -170,6 +177,15 @@ export function createServers(o: Options) {
     ]);
     return envelope(o.pairing.claim(b as any, req.ip));
   });
+  registerQuestionRoutes({
+    remote,
+    adapter: o.adapter,
+    ledger,
+    operations: featureOperations,
+    session,
+    device,
+    envelope,
+  });
   remote.post("/v1/pairings/poll", async (req) => {
     const b = body(req.body, ["claimId", "pollToken"]);
     if (typeof b.claimId !== "string" || typeof b.pollToken !== "string")
@@ -189,11 +205,13 @@ export function createServers(o: Options) {
     return envelope(host());
   });
   remote.get("/v1/device/access", async (req) =>
-    envelope(assertContract('DeviceAccess',{
-      allWorkspaces: device(req).allWorkspaces ?? false,
-      workspaceIds: device(req).workspaceIds,
-      features: normalizeFeatureGrants(device(req).features),
-    })),
+    envelope(
+      assertContract("DeviceAccess", {
+        allWorkspaces: device(req).allWorkspaces ?? false,
+        workspaceIds: device(req).workspaceIds,
+        features: normalizeFeatureGrants(device(req).features),
+      }),
+    ),
   );
   remote.get("/v1/workspaces", async (req) =>
     envelope(
@@ -236,16 +254,28 @@ export function createServers(o: Options) {
         throw new BridgeError("UNSUPPORTED_ACTION", 422);
       const b = body(req.body, ["requestId", "title", "previousTitle"]);
       const id = requestId({ requestId: b.requestId });
-      if (typeof b.title !== "string" || !b.title.trim() ||
-          Array.from(b.title.trim()).length > 200 ||
-          typeof b.previousTitle !== "string" || Array.from(b.previousTitle).length > 4096)
+      if (
+        typeof b.title !== "string" ||
+        !b.title.trim() ||
+        Array.from(b.title.trim()).length > 200 ||
+        typeof b.previousTitle !== "string" ||
+        Array.from(b.previousTitle).length > 4096
+      )
         throw new BridgeError("INVALID_REQUEST", 400);
-      const title = b.title.trim(), previousTitle = b.previousTitle;
-      return envelope(await ledger.perform(device(req).id, id, req.url,
-        { wid, sid, title, previousTitle }, async () => {
-          await o.adapter.rename(wid, sid, title, previousTitle);
-          return sid;
-        }));
+      const title = b.title.trim(),
+        previousTitle = b.previousTitle;
+      return envelope(
+        await ledger.perform(
+          device(req).id,
+          id,
+          req.url,
+          { wid, sid, title, previousTitle },
+          async () => {
+            await o.adapter.rename(wid, sid, title, previousTitle);
+            return sid;
+          },
+        ),
+      );
     },
   );
   remote.get<{ Params: { wid: string; sid: string } }>(
@@ -570,6 +600,17 @@ export function createServers(o: Options) {
     "/admin/devices/:id/revoke",
     async (req) => envelope(await controls.revoke(req.params.id)),
   );
-  remote.addHook('onClose',async () => { featureOperations.close(); });
-  return { remote, admin, host, streams, token, hub, controls, featureOperations };
+  remote.addHook("onClose", async () => {
+    featureOperations.close();
+  });
+  return {
+    remote,
+    admin,
+    host,
+    streams,
+    token,
+    hub,
+    controls,
+    featureOperations,
+  };
 }
