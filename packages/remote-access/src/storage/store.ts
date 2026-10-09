@@ -180,7 +180,7 @@ export class Store {
       await store.update((s) => {
         for (const d of s.devices) if (!d.active) d.revoked = true;
         for (const upload of Object.values(s.uploads ?? {}))
-          if (upload.state === 'committing') upload.state = 'outcome_unknown';
+          if (upload.state === 'committing' || upload.state === 'sending') upload.state = 'outcome_unknown';
         for (const r of Object.values(s.ledger))
           if (r.receipt.state === "pending")
             r.receipt = {

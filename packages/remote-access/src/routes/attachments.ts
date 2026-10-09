@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { BridgeError, record, type Session } from '../contract/index.js';
+import { BridgeError, record, assertContract, type Session } from '../contract/index.js';
 import type { OpenWorkAdapter } from '../adapters/types.js';
 import type { Device, Store } from '../storage/store.js';
 import type { FeatureOperations } from '../auth/feature-access.js';
@@ -20,6 +20,7 @@ interface Options {
 interface Params { wid: string; sid: string; id: string }
 export function registerAttachmentRoutes(o: Options) {
   const uploads = new UploadStore(o.store, o.adapter);
+  o.remote.addHook('onReady', () => uploads.start());
   const base = '/v1/workspaces/:wid/sessions/:sid/attachments';
   const authorize = async (req: FastifyRequest, wid: string, sid: string) => {
     if (o.adapter.capabilities.attachments !== true || !o.adapter.readAttachmentLimits || !o.adapter.uploadAttachment)
@@ -28,6 +29,15 @@ export function registerAttachmentRoutes(o: Options) {
     try { await o.session(req, wid, sid); lease.check(); await uploads.sweep(); lease.check(); return { d, lease }; }
     catch (error) { lease.dispose(); throw error; }
   };
+  o.remote.get<{ Params: Params }>(base + '/limits', async req => {
+    const { wid, sid } = req.params;
+    const { lease } = await authorize(req, wid, sid);
+    try {
+      const limits = await o.adapter.readAttachmentLimits?.(wid, sid, lease.signal);
+      lease.check();
+      return o.envelope(assertContract('AttachmentLimits', limits));
+    } finally { lease.dispose(); }
+  });
   o.remote.post<{ Params: Params }>(base, async req => {
     const { wid, sid } = req.params;
     const { d, lease } = await authorize(req, wid, sid);
@@ -36,7 +46,7 @@ export function registerAttachmentRoutes(o: Options) {
       const receipt = await o.ledger.perform(d.id, b.requestId, req.routeOptions.url!, { wid, sid, ...b },
         () => uploads.allocate(d.id, wid, sid, b, lease));
       lease.check();
-      return o.envelope({ receipt, attachment: receipt.resourceId ? uploads.read(receipt.resourceId, d.id, wid, sid) : null });
+      return o.envelope(assertContract('AttachmentMutation', { receipt, attachment: receipt.resourceId ? uploads.read(receipt.resourceId, d.id, wid, sid) : null }));
     } finally { lease.dispose(); }
   });
   o.remote.get<{ Params: Params }>(base + '/:id', async req => {
@@ -71,7 +81,7 @@ export function registerAttachmentRoutes(o: Options) {
       const receipt = await o.ledger.perform(d.id, b.requestId, req.routeOptions.url!, { wid, sid, id, ...b },
         () => uploads.commit(id, d.id, wid, sid, sha256, lease));
       lease.check();
-      return o.envelope({ receipt, attachment: uploads.read(id, d.id, wid, sid) });
+      return o.envelope(assertContract('AttachmentMutation', { receipt, attachment: uploads.read(id, d.id, wid, sid) }));
     } finally { lease.dispose(); }
   });
   o.remote.post<{ Params: Params }>(base + '/:id/cancel', async req => {
@@ -85,7 +95,7 @@ export function registerAttachmentRoutes(o: Options) {
       const receipt = await o.ledger.perform(d.id, b.requestId, req.routeOptions.url!, { wid, sid, id, ...b },
         () => uploads.cancel(id, d.id, wid, sid, lease));
       lease.check();
-      return o.envelope({ receipt, attachment: uploads.read(id, d.id, wid, sid) });
+      return o.envelope(assertContract('AttachmentMutation', { receipt, attachment: uploads.read(id, d.id, wid, sid) }));
     } finally { lease.dispose(); }
   });
   return uploads;

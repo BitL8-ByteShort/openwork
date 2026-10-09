@@ -1,5 +1,6 @@
 import { UpstreamControls } from "./controls.js";
 import { normalizeQuestion, validateQuestionAnswers } from "./questions.js";
+import { NativeAttachments, InboxMultipart } from "./attachments.js";
 import { createHash } from "node:crypto";
 import {
   BridgeError,
@@ -15,7 +16,7 @@ import {
   type Approval,
   type QuestionAnswers,
 } from "../contract/index.js";
-import type { OpenWorkAdapter } from "./types.js";
+import type { OpenWorkAdapter, StagedAttachment, AttachmentPrompt } from "./types.js";
 interface Connection {
   origin: string;
   token: string;
@@ -101,16 +102,20 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     try {
       this.connection ??= this.validate(await this.discover());
       const c = this.connection;
-      const r = await fetch(c.origin + route, {
+      const multipart = body instanceof InboxMultipart ? body : null;
+      const options: RequestInit & { duplex?: 'half' } = {
         method,
         redirect: "error",
         signal: signal ?? AbortSignal.timeout(method === "GET" ? 15000 : 30000),
         headers: {
           Authorization: `Bearer ${c.token}`,
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(body === undefined ? {} : { "Content-Type": multipart ? multipart.contentType : "application/json" }),
+          ...(multipart ? { 'Content-Length': String(multipart.length) } : {}),
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
+        ...(body === undefined ? {} : { body: multipart ? multipart.stream : JSON.stringify(body) }),
+        ...(multipart ? { duplex: 'half' } : {}),
+      };
+      const r = await fetch(c.origin + route, options);
       if (r.status === 401 && reload && method === "GET") {
         await r.body?.cancel();
         this.connection = this.validate(await this.discover());
@@ -421,6 +426,19 @@ export class OpenWorkV2 implements OpenWorkAdapter {
   private enabled(key: keyof Capabilities) {
     if (this.capabilities[key] !== true)
       throw new BridgeError("UNSUPPORTED_ACTION", 422);
+  }
+  private attachments() {
+    this.enabled('attachments');
+    return new NativeAttachments((path, method, body, signal) => this.request(path, method, body, signal));
+  }
+  async readAttachmentLimits(wid: string, sid: string, signal?: AbortSignal) {
+    return this.attachments().limits(wid, sid, signal);
+  }
+  async uploadAttachment(wid: string, sid: string, file: StagedAttachment, signal: AbortSignal) {
+    return this.attachments().upload(wid, sid, file, signal);
+  }
+  async sendAttachments(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal) {
+    return this.attachments().send(wid, sid, prompt, signal);
   }
   async create(wid: string) {
     this.enabled("createSession");

@@ -1,11 +1,11 @@
 import { constants } from 'node:fs';
-import { open, mkdir, lstat, realpath, unlink } from 'node:fs/promises';
+import { open, mkdir, lstat, realpath, unlink, readdir } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
-import { PreflightError } from '../contract/index.js';
+import { BridgeError, PreflightError } from '../contract/index.js';
 import type { Store } from '../storage/store.js';
-import type { OpenWorkAdapter } from '../adapters/types.js';
+import type { OpenWorkAdapter, NativePromptFile } from '../adapters/types.js';
 import type { FeatureOperations } from '../auth/feature-access.js';
 import {
   attachmentID, chunkBytes, fileBytes, promptBytes, stagingBytes,
@@ -15,9 +15,34 @@ import {
 type Lease = ReturnType<FeatureOperations['begin']>;
 export class UploadStore {
   private queued = new Map<string, Promise<unknown>>();
+  private activeUploads = new Map<string, AbortController>();
+  private timer: ReturnType<typeof setInterval> | undefined;
+  private sweeping: Promise<void> | undefined;
+  private closed = false;
   private folder: string;
   constructor(private store: Store, private adapter: OpenWorkAdapter) {
     this.folder = join(resolve(store.directory), 'uploads');
+  }
+  async start() {
+    if (this.closed || this.timer) return;
+    await this.sweep();
+    this.timer = setInterval(() => {
+      if (this.closed || this.sweeping) return;
+      const pending = this.sweep().catch(error => this.cleanupError(error));
+      this.sweeping = pending;
+      void pending.then(() => { if (this.sweeping === pending) this.sweeping = undefined; });
+    }, 60000);
+    this.timer.unref();
+  }
+  async close() {
+    this.closed = true;
+    clearInterval(this.timer); this.timer = undefined;
+    for (const controller of this.activeUploads.values()) controller.abort();
+    await this.sweeping;
+    await Promise.allSettled([...this.queued.values()]);
+  }
+  private cleanupError(error: unknown) {
+    console.error(JSON.stringify({ event: 'attachment_cleanup_failed', code: error instanceof BridgeError ? error.code : 'STAGING_UNAVAILABLE' }));
   }
   private serial<T>(id: string, work: () => Promise<T>): Promise<T> {
     const pending = (this.queued.get(id) ?? Promise.resolve()).then(work);
@@ -29,6 +54,11 @@ export class UploadStore {
   private path(id: string) {
     if (!attachmentID.test(id)) throw new PreflightError('NOT_FOUND', 404);
     return join(this.folder, id + '.part');
+  }
+  private serialMany<T>(ids: string[], work: () => Promise<T>): Promise<T> {
+    const ordered = [...ids].sort();
+    const next = (index: number): Promise<T> => index === ordered.length ? work() : this.serial(ordered[index]!, () => next(index + 1));
+    return next(0);
   }
   private async directory() {
     const root = resolve(this.store.directory);
@@ -70,17 +100,37 @@ export class UploadStore {
     catch (error) { if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'ENOENT') throw error; }
   }
   async sweep() {
+    if (this.closed) return;
     const expired = Object.values(this.store.snapshot.uploads ?? {}).filter(r =>
       (r.state === 'uploading' || r.state === 'outcome_unknown') && Date.now() - r.createdAt >= uploadLifetime);
     for (const r of expired) await this.serial(r.id, async () => {
       const current = this.store.snapshot.uploads?.[r.id];
-      if (!current || (current.state !== 'uploading' && current.state !== 'outcome_unknown') ||
+      if (this.closed || !current || (current.state !== 'uploading' && current.state !== 'outcome_unknown') ||
           Date.now() - current.createdAt < uploadLifetime) return;
       await this.removeStaging(r.id);
       await this.store.update(s => { const v = s.uploads?.[r.id]; if (v) v.state = 'expired'; });
     });
+    // Allocation can crash after creating its private file but before saving
+    // its record. Delete only old regular files in our generated namespace.
+    await this.directory();
+    for (const name of await readdir(this.folder)) {
+      if (!/^att_[a-f0-9]{32}\.part$/.test(name)) continue;
+      const id = name.slice(0, -5);
+      if (this.store.snapshot.uploads?.[id]) continue;
+      await this.serial(id, async () => {
+        if (this.closed || this.store.snapshot.uploads?.[id]) return;
+        await this.directory();
+        const stat = await lstat(this.path(id)).catch(() => undefined);
+        if (stat?.isFile() && !stat.isSymbolicLink() && stat.uid === process.getuid?.() &&
+            (stat.mode & 0o777) === 0o600 && stat.nlink === 1 && Date.now() - stat.mtimeMs >= uploadLifetime)
+          await this.removeStaging(id);
+      });
+    }
   }
   async cancel(id: string, deviceId: string, wid: string, sid: string, lease: Lease) {
+    lease.check();
+    this.owned(id, deviceId, wid, sid);
+    this.activeUploads.get(id)?.abort();
     return this.serial(id, async () => {
       lease.check();
       this.owned(id, deviceId, wid, sid);
@@ -89,6 +139,27 @@ export class UploadStore {
       await this.store.update(s => { const r = s.uploads?.[id]; if (r) r.state = 'cancelled'; });
       return id;
     });
+  }
+  private async recoverTail(f: FileHandle, r: UploadRecord, lease: Lease) {
+    const size = (await f.stat()).size;
+    if (size < r.receivedBytes || size > r.bytes) throw new PreflightError('STAGING_CHANGED', 409);
+    if (size === r.receivedBytes) return;
+    // Only discard a suffix that never received a durable acknowledgment. The
+    // acknowledged prefix must still match each saved chunk before truncation.
+    for (const chunk of r.chunks) {
+      const hash = createHash('sha256');
+      let offset = chunk.offset;
+      while (offset < chunk.offset + chunk.bytes) {
+        lease.check();
+        const bytes = Buffer.alloc(Math.min(65536, chunk.offset + chunk.bytes - offset));
+        const result = await f.read(bytes, 0, bytes.length, offset);
+        if (!result.bytesRead) throw new PreflightError('STAGING_CHANGED', 409);
+        hash.update(bytes.subarray(0, result.bytesRead)); offset += result.bytesRead;
+      }
+      if (hash.digest('hex') !== chunk.sha256) throw new PreflightError('CHECKSUM_MISMATCH', 422);
+    }
+    lease.check();
+    await f.truncate(r.receivedBytes); await f.sync();
   }
   async allocate(deviceId: string, wid: string, sid: string, metadata: UploadMetadata, lease: Lease) {
     const limits = await this.adapter.readAttachmentLimits?.(wid, sid, lease.signal);
@@ -104,7 +175,7 @@ export class UploadStore {
       lease.check();
       await this.store.update(s => {
         const records = Object.values(s.uploads ?? {}).filter(r => r.deviceId === deviceId &&
-          r.state !== 'cancelled' && r.state !== 'expired');
+          r.state !== 'cancelled' && r.state !== 'expired' && r.state !== 'attached');
         const draft = records.filter(r => r.workspaceId === wid && r.sessionId === sid);
         if (draft.length >= 4 || draft.reduce((n, r) => n + r.bytes, 0) + metadata.bytes > promptBytes)
           throw new PreflightError('DRAFT_TOO_LARGE', 413);
@@ -136,7 +207,7 @@ export class UploadStore {
       if (bytes.length !== Math.min(chunkBytes, r.bytes - offset)) throw new PreflightError('INVALID_CHUNK_LENGTH', 400);
       const f = await this.file(id);
       try {
-        if ((await f.stat()).size !== r.receivedBytes) throw new PreflightError('STAGING_CHANGED', 409);
+        await this.recoverTail(f, r, lease);
         let written = 0;
         while (written < bytes.length) {
           lease.check();
@@ -194,17 +265,70 @@ export class UploadStore {
       if (!upload || !limits || !Number.isSafeInteger(limits.maxFileBytes) || limits.maxFileBytes < r.bytes || !limits.inputMIMEs.includes(r.mime))
         throw new PreflightError('UNSUPPORTED_ATTACHMENT', 422);
       await this.store.update(s => { const current = s.uploads?.[id]; if (current) current.state = 'committing'; });
+      const controller = new AbortController();
+      this.activeUploads.set(id, controller);
       try {
         lease.check();
-        const result = await upload(wid, sid, { id, path: this.path(id), name: r.name, mime: r.mime, bytes: r.bytes }, lease.signal);
+        const result = await upload(wid, sid, { id, path: this.path(id), name: r.name, mime: r.mime, bytes: r.bytes, sha256: r.sha256 },
+          AbortSignal.any([lease.signal, controller.signal]));
         if (typeof result.uri !== 'string' || !result.uri.startsWith('file:///') || result.uri.length > 8192)
           throw new Error('Invalid native upload receipt');
         await this.store.update(s => { const current = s.uploads?.[id]; if (current) { current.nativeURI = result.uri; current.state = 'ready'; } });
         // Only our staging bytes are ours to remove; the native inbox belongs to the host.
-        await unlink(this.path(id)).catch(() => {});
+        await this.removeStaging(id).catch(error => this.cleanupError(error));
         return id;
       } catch (error) {
         await this.store.update(s => { const current = s.uploads?.[id]; if (current) current.state = error instanceof PreflightError ? 'uploading' : 'outcome_unknown'; });
+        throw error;
+      } finally { if (this.activeUploads.get(id) === controller) this.activeUploads.delete(id); }
+    });
+  }
+  async send(deviceId: string, wid: string, sid: string, requestId: string, text: string, ids: string[], lease: Lease) {
+    if (!ids.length || ids.length > 4 || new Set(ids).size !== ids.length)
+      throw new PreflightError('INVALID_REQUEST', 400);
+    return this.serialMany(ids, async () => {
+      lease.check();
+      const records = ids.map(id => this.owned(id, deviceId, wid, sid));
+      if (records.some(r => r.state !== 'ready' || r.promptRequestId !== undefined))
+        throw new PreflightError('ATTACHMENT_NOT_READY', 409);
+      if (records.reduce((n, r) => n + r.bytes, 0) > promptBytes)
+        throw new PreflightError('DRAFT_TOO_LARGE', 413);
+      const send = this.adapter.sendAttachments?.bind(this.adapter);
+      const limits = await this.adapter.readAttachmentLimits?.(wid, sid, lease.signal);
+      lease.check();
+      if (!send || !limits || !Number.isSafeInteger(limits.maxFileBytes) || limits.maxFileBytes < 1 ||
+          records.some(r => r.bytes > Math.min(fileBytes, limits.maxFileBytes) || !limits.inputMIMEs.includes(r.mime)))
+        throw new PreflightError('UNSUPPORTED_ATTACHMENT', 422);
+      const files: NativePromptFile[] = records.map(r => {
+        if (!r.nativeURI) throw new PreflightError('ATTACHMENT_NOT_READY', 409);
+        return { id: r.id, uri: r.nativeURI, name: r.name, mime: r.mime, bytes: r.bytes, sha256: r.sha256 };
+      });
+      await this.store.update(s => {
+        for (const id of ids) {
+          const r = s.uploads?.[id];
+          if (!r || r.state !== 'ready' || r.promptRequestId !== undefined)
+            throw new PreflightError('ATTACHMENT_NOT_READY', 409);
+          r.state = 'sending'; r.promptRequestId = requestId;
+        }
+      });
+      try {
+        lease.check();
+        const messageId = 'msg_' + createHash('sha256').update(deviceId + '\u0000' + requestId).digest('hex').slice(0, 32);
+        await send(wid, sid, { text, messageId, files }, lease.signal);
+        await this.store.update(s => {
+          for (const id of ids) { const r = s.uploads?.[id]; if (r) r.state = 'attached'; }
+        });
+        return sid;
+      } catch (error) {
+        await this.store.update(s => {
+          for (const id of ids) {
+            const r = s.uploads?.[id];
+            if (r) {
+              r.state = error instanceof PreflightError ? 'ready' : 'outcome_unknown';
+              if (error instanceof PreflightError) delete r.promptRequestId;
+            }
+          }
+        });
         throw error;
       }
     });

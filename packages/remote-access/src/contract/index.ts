@@ -145,6 +145,18 @@ export interface QuestionRequest {
   fields: QuestionField[];
 }
 export type QuestionAnswers = Record<string, string | string[]>;
+export interface Attachment {
+  id: string;
+  name: string;
+  mime: string;
+  bytes: number;
+  sha256: string;
+  receivedBytes: number;
+  state: "uploading" | "committing" | "ready" | "sending" | "attached" | "outcome_unknown" | "cancelled" | "expired";
+}
+export interface AttachmentLimits { maxFileBytes: number; inputMIMEs: string[] }
+export interface AttachmentMutation { receipt: MutationReceipt; attachment: Attachment | null }
+export interface SendRequest { requestId: string; text: string; attachmentIds?: string[] }
 export interface MutationReceipt {
   requestId: string;
   resourceId: string | null;
@@ -192,12 +204,18 @@ export function parseApprovalReply(value: unknown): {
   }
 }
 const validateSend = new Ajv({ allErrors: false }).compile(sendSchema);
-export function parseSend(value: unknown): { requestId: string; text: string } {
-  if (!validateSend(value)) throw new BridgeError("INVALID_REQUEST", 400);
-  const v = value as { requestId: string; text: string };
-  if (Buffer.byteLength(v.text, "utf8") > 32768)
+export function parseSend(value: unknown): SendRequest {
+  if (!validateSend(value) || !record(value) || typeof value.requestId !== "string" || typeof value.text !== "string")
+    throw new BridgeError("INVALID_REQUEST", 400);
+  if (Buffer.byteLength(value.text, "utf8") > 32768)
     throw new BridgeError("PROMPT_TOO_LARGE", 413);
-  return v;
+  const result: SendRequest = { requestId: value.requestId, text: value.text };
+  if (value.attachmentIds !== undefined) {
+    if (!Array.isArray(value.attachmentIds) || !value.attachmentIds.every((v: unknown): v is string => typeof v === "string"))
+      throw new BridgeError("INVALID_REQUEST", 400);
+    result.attachmentIds = value.attachmentIds;
+  }
+  return result;
 }
 export function record(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

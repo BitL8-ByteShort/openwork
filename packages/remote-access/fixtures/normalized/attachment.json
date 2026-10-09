@@ -1,0 +1,12 @@
+{
+  "type": "Attachment",
+  "value": {
+    "id": "att_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "photo.png",
+    "mime": "image/png",
+    "bytes": 68,
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "receivedBytes": 68,
+    "state": "ready"
+  }
+}

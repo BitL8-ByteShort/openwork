@@ -1,39 +1,60 @@
-# Attachment staging foundation
+# Attachment transport and prompt binding
 
-This is an unfinished, capability-gated transport slice. The production native
-adapter does not yet advertise `attachments`; these routes reject requests until
-both the capability and native adapter methods are available. Existing phone
-grants do not change.
+This capability remains unavailable in production until the native client and
+paired qualification are complete. Existing phone grants stay unchanged. File
+transfer requires a deliberate host-owned grant; legacy grants default off.
 
-Uploads use server-generated opaque IDs and are bound to one paired device,
-workspace and session. JSON responses contain metadata, progress and mutation
-receipts, never staging paths or native file URIs. Allocation, commit and cancel
-share the existing durable mutation ledger. Chunks are one MiB, except the last;
-an exact offset/content retry succeeds and a conflicting overlap is refused.
+Uploads have server-generated opaque IDs bound to one device, workspace and
+session. JSON contains metadata, progress and mutation receipts, never staging
+paths or native URIs. GET session `/attachments/limits` reports the effective
+file cap and current model's supported input MIME list. Allocation, commit and
+cancel use stable request UUIDs. PUT chunks are one MiB except the final chunk;
+exact content/offset retries succeed and conflicting overlaps fail.
 
-Limits are 20 MiB per file, four files / 40 MiB per draft, and 100 MiB of reserved
-bytes per device. A smaller native limit wins. Staging lives in the private state
-directory, with private regular files, no symlink following and no hard links.
-Commit streams the checksum and checks declared MIME signatures before native
-dispatch. Committing is persisted first. A lost upload reply or interrupted
-commit remains uncertain and cannot be blindly retried with another UUID.
+Product limits are 20 MiB/file, four files and 40 MiB/prompt, and 100 MiB of
+reserved bytes/device. A smaller native cap wins. Private staging files use
+0700 directories and 0600 regular files, without final-component symlink or hard
+link following. Commit verifies length, streamed SHA-256 and MIME signatures.
+These signatures are not full media-decoder validation.
 
-Cancel and expiry remove only staging files. They do not remove native inbox
-results. Uncommitted uploads expire after 24 hours; cleanup currently runs on
-authorized attachment traffic. Committed draft references remain reserved until
-cancelled; prompt consumption is not implemented in this slice.
+The adapter reads native session/model/inbox capabilities before dispatch. PNG
+and PDF materialization was measured on both macOS and Ubuntu NUC with
+`opencode/muse-spark-1.3-contributor-free`. Other models' advertised inputs are
+catalog preflight metadata, not a claim of live qualification. JPEG is not yet
+advertised by this native adapter. The native engine has no model conditional
+write, so a later computer-side model change can race preflight.
 
-Still required before enabling this capability:
+Native upload streams from the already-open staging file. Its inbox filenames
+are generated from the attachment/session IDs. Known symlinks and containment
+changes are rejected before/after dispatch, and returned bytes are verified.
+These checks do not make the legacy native path writer atomic against a hostile
+process running as the same OS user.
 
-- Qualified native upload/materialization adapter and containment checks.
-- Closed shared DTO schemas, prompt attachment IDs, model preflight and prompt
-  deduplication with attachment consumption.
-- Recovery after an unacknowledged partial chunk, active-transfer cancellation,
-  and lifecycle cleanup independent of incoming requests.
-- Native pickers, protected drafts, progress/retry UI and disclosure handling.
-- Paired client qualification on both host platforms, followed by physical-device
-  acceptance through the candidate TestFlight build.
+Prompts accept `attachmentIds`, never phone-selected paths or URIs. All IDs are
+claimed together for one stable send UUID before inference. The native message
+ID is derived from device identity and that UUID. Competing sends cannot consume
+an ID twice. Accepted sends release draft reservations while retaining host
+files. Lost admission replies or restarts retain an uncertain intent and cannot
+be repeated automatically with another UUID.
 
-The route tests use real private storage, authentication, Fastify and mutation
-receipts. Only the native runtime boundary is synthetic. These tests do not
-qualify a physical phone or a production native file upload.
+Native upload is also marked durably before forwarding. A lost/malformed reply
+stays uncertain. Cancellation aborts an active upload and removes only staging;
+it cannot promise to undo an already-dispatched native write. Unacknowledged
+partial chunk tails can be discarded only after the saved prefix is verified.
+Uncommitted staging expires after 24 hours, checked at server startup, every
+minute and on transfer traffic. Old allocation-orphan files in the generated
+staging namespace are cleaned without following symlinks. Shutdown cancels and
+drains operations before the state store closes. Native committed inbox files
+are never deleted by staging cleanup.
+
+Mac and actual NUC each passed 106 package tests, typecheck and build with
+identical production-source hashes. Real scoped requests to the native adapter
+materialized two files in one disposable prompt on each host; same-UUID replay
+produced no second user prompt. Comparable chats, models, defaults, permissions,
+workspace entries and existing pairing/ledger state were preserved. These
+requests used Fastify injection, not a physical phone or a new TLS client test.
+
+Still required: native pickers, protected phone drafts/bytes, progress/retry UI,
+photo conversion policy and tests, paired-client qualification on both hosts,
+and physical acceptance through the next TestFlight candidate. Production
+capability advertisement and preview replacement wait for that client slice.

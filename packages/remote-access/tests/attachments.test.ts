@@ -8,6 +8,7 @@ import { Pairing } from '../src/auth/pairing.js';
 import { createServers } from '../src/server.js';
 import { OpenWorkV2 } from '../src/adapters/openwork-v2-01857.js';
 import type { Session } from '../src/contract/index.js';
+import { assertContract, parseSend } from '../src/contract/index.js';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jS1sAAAAASUVORK5CYII=', 'base64');
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -17,20 +18,28 @@ class FixtureAdapter extends OpenWorkV2 {
   maxFileBytes = 20 * 1024 * 1024;
   loseReply = false;
   beforeUpload: (() => Promise<void>) | undefined;
+  inputMIMEs = ['image/png', 'image/jpeg', 'application/pdf'];
+  promptBodies: { text: string; messageId: string; files: { id: string; uri: string; name: string; mime: string; bytes: number; sha256: string }[] }[] = [];
+  losePromptReply = false;
   constructor() {
     super(async () => { throw Error('No live runtime in tests'); });
-    this.capabilities = { ...this.capabilities, attachments: true };
+    this.capabilities = { ...this.capabilities, attachments: true, sendText: true };
   }
   override async readSession(wid: string, sid: string): Promise<Session> {
     return { id: sid, workspaceId: wid, title: 'Synthetic chat', updatedAt: new Date(0).toISOString(), status: 'idle', modelLabel: null };
   }
-  async readAttachmentLimits() { return { maxFileBytes: this.maxFileBytes, inputMIMEs: ['image/png', 'image/jpeg', 'application/pdf'] }; }
+  async readAttachmentLimits() { return { maxFileBytes: this.maxFileBytes, inputMIMEs: this.inputMIMEs }; }
   async uploadAttachment(_wid: string, _sid: string, file: { id: string; path: string; name: string; mime: string; bytes: number }, signal: AbortSignal) {
     await this.beforeUpload?.();
     signal.throwIfAborted();
     this.nativeFiles.push({ id: file.id, bytes: await readFile(file.path) });
     if (this.loseReply) throw Error('Synthetic upload reply lost after write');
     return { uri: 'file:///synthetic-inbox/' + file.id + '.png' };
+  }
+  async sendAttachments(_wid: string, _sid: string, prompt: { text: string; messageId: string; files: { id: string; uri: string; name: string; mime: string; bytes: number; sha256: string }[] }, signal: AbortSignal) {
+    signal.throwIfAborted();
+    this.promptBodies.push(prompt);
+    if (this.losePromptReply) throw Error('Synthetic admission reply lost');
   }
 }
 async function fixture(run: (apps: ReturnType<typeof createServers>, adapter: FixtureAdapter, store: Store, headers: { authorization: string }) => Promise<void>) {
@@ -154,6 +163,74 @@ async function staged(apps: ReturnType<typeof createServers>, headers: { authori
   expect((await apps.remote.inject({ method: 'PUT', url: base + '/' + id + '/chunks?offset=0', headers: { ...headers, 'content-type': 'application/octet-stream' }, payload: png })).statusCode).toBe(200);
   return id;
 }
+async function ready(apps: ReturnType<typeof createServers>, headers: { authorization: string }) {
+  const id = await staged(apps, headers);
+  expect((await apps.remote.inject({ method: 'POST', url: base + '/' + id + '/commit', headers, payload: { requestId: randomUUID(), sha256: sha(png) } })).json().data.attachment.state).toBe('ready');
+  return id;
+}
+const messages = base.replace('/attachments', '/messages');
+
+test('closed attachment DTOs reject private paths and sends accept IDs with optional empty text', () => {
+  const value = { id: 'att_' + 'a'.repeat(32), name: 'photo.png', mime: 'image/png', bytes: 68, sha256: sha(png), receivedBytes: 68, state: 'ready' };
+  expect(() => assertContract('Attachment', value)).not.toThrow();
+  expect(() => assertContract('Attachment', { ...value, path: '/private/hidden' })).toThrow();
+  expect(() => assertContract('Attachment', { ...value, bytes: -1 })).toThrow();
+  expect(parseSend({ requestId: randomUUID(), text: '', attachmentIds: [value.id] })).toMatchObject({ text: '', attachmentIds: [value.id] });
+  expect(() => parseSend({ requestId: randomUUID(), text: '' })).toThrow();
+  expect(() => parseSend({ requestId: randomUUID(), text: 'Text', attachmentIds: [value.id], uri: 'file:///hidden' })).toThrow();
+});
+
+test('a committed ID binds to one prompt UUID and duplicate sends forward exactly once', () => fixture(async (apps, adapter, _store, headers) => {
+  const id = await ready(apps, headers);
+  const requestId = randomUUID();
+  const options = { method: 'POST' as const, url: messages, headers, payload: { requestId, text: 'Look at this', attachmentIds: [id] } };
+  const first = await apps.remote.inject(options);
+  expect(first.statusCode).toBe(200);
+  expect(first.json().data.state).toBe('accepted');
+  expect((await apps.remote.inject(options)).json().data.state).toBe('accepted');
+  expect(adapter.promptBodies).toHaveLength(1);
+  expect(adapter.promptBodies[0]).toMatchObject({ text: 'Look at this', files: [{ id, uri: 'file:///synthetic-inbox/' + id + '.png', name: 'photo.png', mime: 'image/png', bytes: 68, sha256: sha(png) }] });
+  expect(adapter.promptBodies[0]?.messageId).toBe('msg_' + sha(Buffer.from('device\u0000' + requestId)).slice(0,32));
+  expect((await apps.remote.inject({ url: base + '/' + id, headers })).json().data.state).toBe('attached');
+  expect((await apps.remote.inject({ ...options, payload: { ...options.payload, text: 'Changed' } })).statusCode).toBe(409);
+  expect((await apps.remote.inject({ ...options, payload: { ...options.payload, requestId: randomUUID() } })).statusCode).toBe(409);
+}));
+
+test('a lost prompt reply retains the IDs and never forwards them again', () => fixture(async (apps, adapter, _store, headers) => {
+  const id = await ready(apps, headers);
+  adapter.losePromptReply = true;
+  const options = { method: 'POST' as const, url: messages, headers, payload: { requestId: randomUUID(), text: '', attachmentIds: [id] } };
+  expect((await apps.remote.inject(options)).json().data?.state).toBe('outcome_unknown');
+  expect((await apps.remote.inject(options)).json().data?.state).toBe('outcome_unknown');
+  expect((await apps.remote.inject({ ...options, payload: { ...options.payload, requestId: randomUUID() } })).statusCode).toBe(409);
+  expect(adapter.promptBodies).toHaveLength(1);
+}));
+
+test('the phone can inspect effective MIME limits before selecting a file', () => fixture(async (apps, _adapter, _store, headers) => {
+  const response = await apps.remote.inject({ url: base + '/limits', headers });
+  expect(response.statusCode).toBe(200);
+  expect(response.json().data).toEqual({ maxFileBytes: 20971520, inputMIMEs: ['image/png', 'image/jpeg', 'application/pdf'] });
+}));
+
+test('an unsupported changed model and revoked file grant prevent prompt inference', () => fixture(async (apps, adapter, store, headers) => {
+  const id = await ready(apps, headers);
+  const options = { method: 'POST' as const, url: messages, headers, payload: { requestId: randomUUID(), text: 'Inspect', attachmentIds: [id] } };
+  adapter.inputMIMEs = [];
+  expect((await apps.remote.inject(options)).statusCode).toBe(422);
+  adapter.inputMIMEs = ['image/png'];
+  await store.update(s => { s.devices[0]!.features!.fileTransfer = false; });
+  expect((await apps.remote.inject({ ...options, payload: { ...options.payload, requestId: randomUUID() } })).statusCode).toBe(403);
+  expect(adapter.promptBodies).toHaveLength(0);
+}));
+
+test('unknown IDs, duplicate IDs and more than four IDs never reach prompt inference', () => fixture(async (apps, adapter, _store, headers) => {
+  const id = 'att_' + 'a'.repeat(32);
+  const options = { method: 'POST' as const, url: messages, headers };
+  expect((await apps.remote.inject({ ...options, payload: { requestId: randomUUID(), text: 'Inspect', attachmentIds: [id] } })).statusCode).toBe(404);
+  expect((await apps.remote.inject({ ...options, payload: { requestId: randomUUID(), text: 'Inspect', attachmentIds: [id,id] } })).statusCode).toBe(400);
+  expect((await apps.remote.inject({ ...options, payload: { requestId: randomUUID(), text: 'Inspect', attachmentIds: ['a','b','c','d','e'].map(c => 'att_'+c.repeat(32)) } })).statusCode).toBe(400);
+  expect(adapter.promptBodies).toHaveLength(0);
+}));
 
 test('cancellation deletes only staging, releases a draft slot and repeats without a second effect', () => fixture(async (apps, _adapter, store, headers) => {
   const id = await staged(apps, headers);
@@ -241,3 +318,115 @@ test('restart resumes saved chunks but turns an interrupted native commit into a
     expect(adapter.nativeFiles).toHaveLength(1);
   } finally { await apps.remote.close(); await apps.admin.close(); await store.close(); await rm(folder, { recursive: true, force: true }); }
 });
+
+test('a restart keeps a sending prompt uncertain and preserves its durable UUID claim', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'attachment-prompt-restart-'));
+  const root = join(folder, 'state'), id = 'att_' + 'a'.repeat(32), requestId = randomUUID();
+  const original = await Store.open(root);
+  const baseline = original.snapshot;
+  await original.close();
+  await writeFile(join(root, 'state.json'), JSON.stringify({ ...baseline, uploads: { [id]: {
+    id, deviceId: 'device', workspaceId: 'owned', sessionId: 'chat', name: 'photo.png', mime: 'image/png', bytes: 68, sha256: sha(png),
+    receivedBytes: 68, createdAt: Date.now(), chunks: [{ offset: 0, bytes: 68, sha256: sha(png) }],
+    state: 'sending', nativeURI: 'file:///synthetic-inbox/file.png', promptRequestId: requestId,
+  } } }), { mode: 0o600 });
+  let restored: Store | undefined;
+  try {
+    restored = await Store.open(root);
+    expect(restored.snapshot.uploads?.[id]).toMatchObject({ state: 'outcome_unknown', promptRequestId: requestId });
+  } finally { await restored?.close(); await rm(folder, { recursive: true, force: true }); }
+});
+
+test('an unacknowledged partial chunk is discarded and safely retried at the durable offset', () => fixture(async (apps, adapter, store, headers) => {
+  const allocated = await apps.remote.inject({ method: 'POST', url: base, headers, payload: metadata() });
+  expect(allocated.statusCode).toBe(200);
+  const id: string = allocated.json().data.attachment.id;
+  // A crash can leave bytes on disk before the chunk receipt was durably saved.
+  await writeFile(join(store.directory, 'uploads', id + '.part'), png.subarray(0, 17));
+  expect((await apps.remote.inject({ method: 'PUT', url: base + '/' + id + '/chunks?offset=0',
+    headers: { ...headers, 'content-type': 'application/octet-stream' }, payload: png })).statusCode).toBe(200);
+  expect((await apps.remote.inject({ method: 'POST', url: base + '/' + id + '/commit', headers,
+    payload: { requestId: randomUUID(), sha256: sha(png) } })).json().data.attachment.state).toBe('ready');
+  expect(adapter.nativeFiles[0]?.bytes.equals(png)).toBe(true);
+}));
+
+test('cleanup expires staging without any phone request and stops before the store closes', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  try {
+    await fixture(async (apps, _adapter, store, headers) => {
+      const id = await staged(apps, headers);
+      const now = Date.now();
+      const spy = vi.spyOn(Date, 'now').mockReturnValue(now + 86400001);
+      try {
+        await vi.advanceTimersByTimeAsync(60000);
+        await vi.waitFor(() => expect(store.snapshot.uploads?.[id]?.state).toBe('expired'), { timeout: 500, interval: 10 });
+        await expect(readFile(join(store.directory, 'uploads', id + '.part'))).rejects.toMatchObject({ code: 'ENOENT' });
+        expect(store.snapshot.uploads?.[id]?.state).toBe('expired');
+      } finally { spy.mockRestore(); }
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
+});
+
+test('cancelling an active native upload aborts it promptly and keeps the typed prompt separate', () => fixture(async (apps, adapter, store, headers) => {
+  const id = await staged(apps, headers);
+  let entered!: () => void;
+  const waiting = new Promise<void>(r => { entered = r; });
+  adapter.uploadAttachment = async (_wid, _sid, _file, signal) => {
+    entered();
+    await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(Error('Synthetic upload cancelled')), { once: true }));
+    return { uri: 'file:///synthetic-inbox/' + id + '.png' };
+  };
+  const pending = apps.remote.inject({ method: 'POST', url: base + '/' + id + '/commit', headers,
+    payload: { requestId: randomUUID(), sha256: sha(png) } });
+  await waiting;
+  const cancellation = apps.remote.inject({ method: 'POST', url: base + '/' + id + '/cancel', headers, payload: { requestId: randomUUID() } });
+  const result = await Promise.race([Promise.all([pending, cancellation]), new Promise<'timeout'>(resolve => {
+    const timer = setTimeout(() => resolve('timeout'), 250); timer.unref();
+  })]);
+  if (result === 'timeout') {
+    // Tear down the boundary so a failing test leaves no live mutation behind.
+    apps.featureOperations.cancelDevice('device'); await pending; await cancellation;
+  }
+  expect(result).not.toBe('timeout');
+  expect(store.snapshot.uploads?.[id]?.state).toBe('cancelled');
+  expect(adapter.promptBodies).toHaveLength(0);
+}));
+
+test('accepted prompts release draft slots without deleting committed host files', () => fixture(async (apps, adapter, _store, headers) => {
+  const ids = [];
+  for (let i = 0; i < 4; i++) ids.push(await ready(apps, headers));
+  expect((await apps.remote.inject({ method: 'POST', url: messages, headers,
+    payload: { requestId: randomUUID(), text: '', attachmentIds: ids } })).json().data.state).toBe('accepted');
+  expect((await apps.remote.inject({ method: 'POST', url: base, headers, payload: metadata() })).statusCode).toBe(200);
+  expect(adapter.nativeFiles).toHaveLength(4);
+  expect(adapter.nativeFiles.every(f => f.bytes.equals(png))).toBe(true);
+}));
+
+test('two simultaneous prompt intents cannot claim the same ready attachment', () => fixture(async (apps, adapter, _store, headers) => {
+  const id = await ready(apps, headers);
+  const send = (requestId: string) => apps.remote.inject({ method: 'POST', url: messages, headers,
+    payload: { requestId, text: '', attachmentIds: [id] } });
+  const result = await Promise.all([send(randomUUID()), send(randomUUID())]);
+  expect(result.map(r => r.statusCode).sort()).toEqual([200, 409]);
+  expect(adapter.promptBodies).toHaveLength(1);
+}));
+
+test('expired allocation-orphan bytes are cleaned while unrelated files and symlink targets survive', () => fixture(async (apps, _adapter, store, headers) => {
+  await staged(apps, headers);
+  const root = join(store.directory, 'uploads');
+  const orphan = join(root, 'att_' + 'f'.repeat(32) + '.part');
+  const unrelated = join(root, 'unrelated.txt'), target = join(store.directory, 'keep.txt');
+  await writeFile(orphan, 'Uncommitted orphan', { mode: 0o600 });
+  await writeFile(unrelated, 'Keep unrelated', { mode: 0o600 });
+  await writeFile(target, 'Keep target', { mode: 0o600 });
+  await symlink(target, join(root, 'att_' + 'e'.repeat(32) + '.part'));
+  const now = Date.now();
+  const spy = vi.spyOn(Date, 'now').mockReturnValue(now + 86400001);
+  try {
+    expect((await apps.remote.inject({ url: base + '/limits', headers })).statusCode).toBe(200);
+    await expect(readFile(orphan)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(unrelated, 'utf8')).toBe('Keep unrelated');
+    expect(await readFile(target, 'utf8')).toBe('Keep target');
+  } finally { spy.mockRestore(); }
+}));

@@ -187,7 +187,7 @@ export function createServers(o: Options) {
     device,
     envelope,
   });
-  registerAttachmentRoutes({ remote, adapter: o.adapter, store: o.store, ledger, operations: featureOperations, session, device, envelope });
+  const uploads = registerAttachmentRoutes({ remote, adapter: o.adapter, store: o.store, ledger, operations: featureOperations, session, device, envelope });
   remote.post("/v1/pairings/poll", async (req) => {
     const b = body(req.body, ["claimId", "pollToken"]);
     if (typeof b.claimId !== "string" || typeof b.pollToken !== "string")
@@ -319,6 +319,18 @@ export function createServers(o: Options) {
       const b = parseSend(req.body);
       if (!o.adapter.capabilities.sendText)
         throw new BridgeError("UNSUPPORTED_ACTION", 422);
+      const ids = b.attachmentIds;
+      if (ids) {
+        if (o.adapter.capabilities.attachments !== true || !o.adapter.sendAttachments)
+          throw new BridgeError("UNSUPPORTED_ACTION", 422);
+        const d = device(req), lease = featureOperations.begin(d.id, wid, 'fileTransfer');
+        try {
+          const receipt = await ledger.perform(d.id, b.requestId, req.url, { wid, sid, text: b.text, attachmentIds: ids },
+            () => uploads.send(d.id, wid, sid, b.requestId, b.text, ids, lease));
+          lease.check();
+          return envelope(receipt);
+        } finally { lease.dispose(); }
+      }
       return envelope(
         await ledger.perform(
           device(req).id,
@@ -604,6 +616,7 @@ export function createServers(o: Options) {
   );
   remote.addHook("onClose", async () => {
     featureOperations.close();
+    await uploads.close();
   });
   return {
     remote,

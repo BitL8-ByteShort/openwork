@@ -1,0 +1,10 @@
+{
+  "type": "AttachmentLimits",
+  "value": {
+    "maxFileBytes": 20971520,
+    "inputMIMEs": [
+      "image/png",
+      "application/pdf"
+    ]
+  }
+}
