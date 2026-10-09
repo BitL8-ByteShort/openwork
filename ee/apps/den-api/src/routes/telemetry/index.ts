@@ -31,7 +31,7 @@ import { describeRoute } from "hono-openapi"
 import { z } from "zod"
 import { db } from "../../db.js"
 import { checkEntitlement } from "../../entitlements.js"
-import { jsonValidator, orgMemberRoute, orgRoleRoute, queryValidator } from "../../middleware/index.js"
+import { jsonValidator, orgMemberRoute, orgPermissionRoute, queryValidator } from "../../middleware/index.js"
 import { enterprisePlanRequiredSchema, invalidRequestSchema, jsonResponse, unauthorizedSchema, emptyResponse } from "../../openapi.js"
 import type { AuthContextVariables } from "../../session.js"
 import type { UserOrganizationsContext, OrganizationContextVariables } from "../../middleware/index.js"
@@ -138,7 +138,7 @@ export function registerTelemetryRoutes<T extends { Variables: TelemetryRouteVar
       },
     }),
     // Organization-wide usage aggregates: the same admin and Enterprise gate as /v1/telemetry/analytics.
-    orgRoleRoute(["admin"]),
+    orgPermissionRoute("usage_analytics.view"),
     queryValidator(telemetryDimensionsQuerySchema),
     async (c) => {
       const orgId = c.get("activeOrganizationId")
@@ -193,7 +193,7 @@ export function registerTelemetryRoutes<T extends { Variables: TelemetryRouteVar
     }),
     // Organization-wide activity: the same admin and Enterprise gate as /v1/telemetry/analytics.
     // Den web's overview falls back to /v1/org for member and invite counts.
-    orgRoleRoute(["admin"]),
+    orgPermissionRoute("usage_analytics.view"),
     async (c) => {
       const orgId = c.get("activeOrganizationId")
       if (!orgId) {
@@ -250,7 +250,7 @@ export function registerTelemetryRoutes<T extends { Variables: TelemetryRouteVar
         402: jsonResponse("Usage analytics requires an Enterprise plan.", enterprisePlanRequiredSchema),
       },
     }),
-    orgRoleRoute(["admin"]),
+    orgPermissionRoute("usage_analytics.view"),
     queryValidator(telemetryAnalyticsQuerySchema),
     async (c) => {
       const orgId = c.get("activeOrganizationId")

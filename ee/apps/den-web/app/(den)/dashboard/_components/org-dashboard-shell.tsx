@@ -44,6 +44,7 @@ import {
   getScimRoute,
   getWorkflowRunsRoute,
   getWebRoute,
+  getPermissionsRoute,
 } from "../../_lib/den-org";
 import { useOrgListWindow } from "../../_lib/use-org-list-window";
 import { useOrgDashboard } from "../_providers/org-dashboard-provider";
@@ -239,6 +240,9 @@ function getDashboardPageTitle(pathname: string, orgSlug: string | null) {
   if (pathname.startsWith(getMembersRoute(orgSlug))) {
     return "Members";
   }
+  if (pathname.startsWith(getPermissionsRoute(orgSlug))) {
+    return "Permissions";
+  }
   if (pathname.startsWith(getApiKeysRoute(orgSlug))) {
     return "API Keys";
   }
@@ -430,7 +434,7 @@ export function OrgDashboardShell({ children }: { children: React.ReactNode }) {
   const access = getOrgAccessFlags(
     orgContext?.currentMember.role ?? "member",
     orgContext?.currentMember.isOwner ?? false,
-    orgContext?.roles,
+    orgContext?.currentMember.permissions,
   );
 
   const pageTitle = getDashboardPageTitle(pathname, activeOrg?.slug ?? null);
@@ -459,6 +463,7 @@ export function OrgDashboardShell({ children }: { children: React.ReactNode }) {
     },
     orgMode: runtimeConfig.orgMode,
     runtimeConfigLoaded,
+    permissionsEnabled: orgFeatureEnabled(orgContext, "permissions"),
     managedDeployments: orgFeatureEnabled(orgContext, "managedDeployments"),
   });
 

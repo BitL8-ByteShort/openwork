@@ -32,6 +32,7 @@ import {
   getMcpConnectionsRoute,
   getMembersRoute,
   getOrgSettingsRoute,
+  getPermissionsRoute,
   getPluginsRoute,
   getScimRoute,
   getSsoRoute,
@@ -39,6 +40,7 @@ import {
   getWebRoute,
 } from "../../_lib/den-org";
 import type { DenOrgMode } from "../../_lib/runtime-config";
+import { canOpenAdminRoute } from "./admin-route-access";
 
 export type DashboardNavChild = {
   href: string;
@@ -82,6 +84,8 @@ export type BuildDashboardNavSectionsInput = {
   runtimeConfigLoaded: boolean;
   /** How many Library items wait on the viewer's sign-in. */
   libraryNeedsSignIn?: number;
+  /** The organization has the `permissions` feature (orgFeatureEnabled). */
+  permissionsEnabled?: boolean;
   /** The managedDeployments feature is on for this organization. */
   managedDeployments?: boolean;
 };
@@ -92,6 +96,7 @@ export function buildDashboardNavSections({
   capabilities,
   runtimeConfigLoaded,
   libraryNeedsSignIn = 0,
+  permissionsEnabled = false,
   managedDeployments = false,
 }: BuildDashboardNavSectionsInput): DashboardNavSection[] {
   const workflowsEnabled = capabilities.workflows;
@@ -116,37 +121,45 @@ export function buildDashboardNavSections({
       : []),
   ];
 
-  const manageItems: DashboardNavItem[] = access.isAdmin && orgSlug
+  // Admin-area entries appear only where the member holds the page's permission.
+  const canOpen = (href: string) => canOpenAdminRoute(href, access);
+  const manageItems: DashboardNavItem[] = orgSlug
     ? [
         { href: getPluginsRoute(orgSlug), label: "Plugins", icon: Box },
         { href: getMcpConnectionsRoute(orgSlug), label: "Connectors", icon: Plug, badge: "MCPs" },
         { href: getAiGatewayRoute(orgSlug), label: "AI Gateway", icon: Sparkles },
         { href: getDesktopPoliciesRoute(orgSlug), label: "Desktop policies", icon: Laptop },
         ...(managedDeployments ? [{ href: getDeploymentsRoute(orgSlug), label: "Deployments", icon: Server }] : []),
-      ]
+      ].filter((item) => canOpen(item.href))
     : [];
   const observabilityItems: DashboardNavItem[] = orgSlug
     ? [
-        ...(access.isAdmin ? [{ href: getAnalyticsRoute(orgSlug), label: "Analytics", icon: BarChart3 }] : []),
-        ...(capabilities.auditLogs ? [{ href: getAuditLogsRoute(orgSlug), label: "Audit logs", icon: access.isAdmin ? ScrollText : LockKeyhole, ...(access.isAdmin ? {} : { badge: "Admin access" }) }] : []),
+        ...(access.canViewUsageAnalytics ? [{ href: getAnalyticsRoute(orgSlug), label: "Analytics", icon: BarChart3 }] : []),
+        ...(capabilities.auditLogs
+          ? [{
+              href: getAuditLogsRoute(orgSlug),
+              label: "Audit logs",
+              icon: access.canViewAuditLogs ? ScrollText : LockKeyhole,
+              ...(access.canViewAuditLogs ? {} : { badge: "Locked" }),
+            }]
+          : []),
       ]
     : [];
   const settingsChildren: DashboardNavChild[] = orgSlug
     ? [
-        ...(access.canViewSettings
-          ? [
-              { href: getOrgSettingsRoute(orgSlug), label: "General" },
-              { href: getDiagnosticsRoute(orgSlug), label: "Diagnostics" },
-              { href: getBillingRoute(orgSlug), label: "Billing" },
-              { href: getApiKeysRoute(orgSlug), label: "API Keys" },
-              { href: getSsoRoute(orgSlug), label: "SSO" },
-              { href: getScimRoute(orgSlug), label: "SCIM" },
-            ]
-          : []),
-        ...(access.isAdmin
+        ...[
+          { href: getOrgSettingsRoute(orgSlug), label: "General" },
+          { href: getDiagnosticsRoute(orgSlug), label: "Diagnostics" },
+          { href: getBillingRoute(orgSlug), label: "Billing" },
+          { href: getApiKeysRoute(orgSlug), label: "API Keys" },
+        ].filter((item) => canOpen(item.href)),
+        ...permissionsNavChildren(orgSlug, access, permissionsEnabled),
+        ...(access.canViewSso ? [{ href: getSsoRoute(orgSlug), label: "SSO" }] : []),
+        ...(access.canViewScim ? [{ href: getScimRoute(orgSlug), label: "SCIM" }] : []),
+        ...(canOpen(getMarketplacesRoute(orgSlug))
           ? [{ href: getMarketplacesRoute(orgSlug), label: "Advanced" }]
           : []),
-        ...(capabilities.mcpConnections && access.isAdmin
+        ...(capabilities.mcpConnections && canOpen(getToolTesterRoute(orgSlug))
           ? [{ href: getToolTesterRoute(orgSlug), label: "Tool Tester" }]
           : []),
       ]
@@ -160,7 +173,7 @@ export function buildDashboardNavSections({
       }
     : null;
   const teamItems: DashboardNavItem[] = [
-    ...(access.isAdmin && orgSlug
+    ...(orgSlug && canOpen(getMembersRoute(orgSlug))
       ? [{ href: getMembersRoute(orgSlug), label: "Members", icon: Users }]
       : []),
     ...(settingsGroup ? [settingsGroup] : []),
@@ -172,6 +185,17 @@ export function buildDashboardNavSections({
     ...(observabilityItems.length > 0 ? [{ label: "Observability", items: observabilityItems }] : []),
     ...(teamItems.length > 0 ? [{ label: "Team", items: teamItems }] : []),
   ];
+}
+
+/**
+ * Permissions appears for members who hold `permissions.view` while the feature
+ * is on. While it is off, people who could manage it keep a locked entry that
+ * says why (DESIGN.md P4); everyone else does not see it.
+ */
+function permissionsNavChildren(orgSlug: string, access: DenOrgAccessFlags, enabled: boolean): DashboardNavChild[] {
+  const href = getPermissionsRoute(orgSlug);
+  if (enabled) return access.canViewPermissions ? [{ href, label: "Permissions" }] : [];
+  return access.canManagePermissions ? [{ href, label: "Permissions", badge: "Enterprise" }] : [];
 }
 
 // Alias order is ranking priority in the command palette.
@@ -191,6 +215,7 @@ const PAGE_KEYWORDS: Record<string, string[]> = {
   General: ["organization", "workspace"],
   Members: ["people", "users", "invite", "teams", "roles"],
   Models: ["llm", "provider", "byok", "api key"],
+  Permissions: ["access", "roles", "teams", "admin", "rbac"],
   "My Automations": ["schedule", "recurring", "tasks"],
   "My Library": ["skills", "plugins", "connections"],
   "OpenWork Models": ["llm", "provider", "managed", "inference"],

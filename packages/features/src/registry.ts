@@ -179,6 +179,13 @@ export const FEATURES = defineFeatures({
     deployments: everywhere,
     default: false,
   },
+  permissions: {
+    label: "Permissions",
+    description: "Organization admins choose what members, admins and each team can do, instead of the fixed Member and Admin defaults.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
   gatewayCloudSignIn: {
     label: "AI Gateway: AWS and Microsoft sign-in",
     description: "Organization admins can add Microsoft Foundry, and let each person sign in to Amazon Bedrock with AWS IAM Identity Center or to Microsoft Foundry with Microsoft Entra ID instead of sharing one key.",

@@ -7,12 +7,12 @@ import { ORG_SCOPE_HEADER } from "../../../_lib/org-scope";
 import { useOrgDashboard } from "../../_providers/org-dashboard-provider";
 import { skillUsagePath, skillUsageReportSchema, type SkillUsageWindow } from "./skill-usage-data";
 
-/** True when the signed-in member is an admin of an organization with Skill usage on. */
+/** True when the signed-in member can view usage analytics in an organization with Skill usage on. */
 export function useSkillUsageAvailable() {
   const { orgContext } = useOrgDashboard();
   const member = orgContext?.currentMember;
-  const isAdmin = member ? getOrgAccessFlags(member.role, member.isOwner, orgContext?.roles).isAdmin : false;
-  return isAdmin && orgFeatureEnabled(orgContext, "skillUsage");
+  const canView = member ? getOrgAccessFlags(member.role, member.isOwner, member.permissions).canViewUsageAnalytics : false;
+  return canView && orgFeatureEnabled(orgContext, "skillUsage");
 }
 
 export function useSkillUsage(days: SkillUsageWindow) {

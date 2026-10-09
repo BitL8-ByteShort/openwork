@@ -16,7 +16,7 @@ import { DenPageHeader } from "../../_components/ui/page-header";
 import { DenSelect } from "../../_components/ui/select";
 import { DenSkeleton } from "../../_components/ui/skeleton";
 import { getErrorMessage, getRequestError, requestJson } from "../../_lib/den-flow";
-import { getOrgAccessFlags, orgFeatureEnabled } from "../../_lib/den-org";
+import { getOrgAccessFlags, orgFeatureEnabled, permissionLockReason } from "../../_lib/den-org";
 import { useOrgDashboard } from "../_providers/org-dashboard-provider";
 
 type Configuration = z.infer<typeof managedDeploymentConfigurationSchema>;
@@ -124,7 +124,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export function ManagedDeploymentsScreen() {
   const { orgId, orgContext, runReauthableAction } = useOrgDashboard();
-  const access = getOrgAccessFlags(orgContext?.currentMember.role ?? "member", orgContext?.currentMember.isOwner ?? false, orgContext?.roles);
+  const access = getOrgAccessFlags(orgContext?.currentMember.role ?? "member", orgContext?.currentMember.isOwner ?? false, orgContext?.currentMember.permissions);
   const enabled = orgFeatureEnabled(orgContext, "managedDeployments");
   const [deployments, setDeployments] = useState<ManagedDeployment[]>([]);
   const [configuration, setConfiguration] = useState<Configuration | null>(null);
@@ -215,8 +215,8 @@ export function ManagedDeploymentsScreen() {
   }
 
   const locked = !enabled ? "Deployments aren't turned on for this workspace. Ask your OpenWork contact to enable them."
-    : !access.canViewSettings ? "Only workspace admins can see deployments." : null;
-  const canCreate = Boolean(!locked && aws?.available && access.canManageSettings);
+    : !access.canViewDeployments ? permissionLockReason("deployments.view") : null;
+  const canCreate = Boolean(!locked && aws?.available && access.canManageDeployments);
 
   return (
     <section className="mx-auto w-full max-w-5xl space-y-6 p-6" data-testid="managed-deployments-screen">
@@ -231,7 +231,7 @@ export function ManagedDeploymentsScreen() {
           {!loading && aws && !aws.available ? (
             <p className="flex items-center gap-2 text-[13px] text-gray-500"><LockKeyhole aria-hidden className="size-4" />No AWS installer is published for this OpenWork environment yet. An OpenWork operator publishes it.</p>
           ) : null}
-          {!loading && !access.canManageSettings ? <p className="flex items-center gap-2 text-[13px] text-gray-500"><LockKeyhole aria-hidden className="size-4" />Owners and super-admins create and update deployments.</p> : null}
+          {!loading && !access.canManageDeployments ? <p className="flex items-center gap-2 text-[13px] text-gray-500"><LockKeyhole aria-hidden className="size-4" />{permissionLockReason("deployments.manage")}</p> : null}
           {loading ? (
             <div className="space-y-2" aria-busy="true"><DenSkeleton className="h-12 w-full" /><DenSkeleton className="h-12 w-full" /></div>
           ) : deployments.length === 0 && !error ? (
@@ -259,7 +259,7 @@ export function ManagedDeploymentsScreen() {
             </ul>
           )}
           {selected ? (
-            <DeploymentDetail deployment={selected} launch={launch?.deployment.id === selected.id ? launch : null} busy={busy} canManage={access.canManageSettings}
+            <DeploymentDetail deployment={selected} launch={launch?.deployment.id === selected.id ? launch : null} busy={busy} canManage={access.canManageDeployments}
               copied={copied} confirmRemove={confirmRemove} actionError={actionError}
               onPrepare={(kind) => { void prepare(selected, kind); }}
               onCopy={(command) => { void navigator.clipboard.writeText(command).then(() => setCopied(true)).catch(() => setActionError("Couldn't copy. Open Technical details and copy the command.")); }}

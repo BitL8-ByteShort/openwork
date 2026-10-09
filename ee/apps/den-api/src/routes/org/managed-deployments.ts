@@ -18,11 +18,10 @@ import { attributeAuditRequest, auditServiceAttribution } from "../../audit/requ
 import { db } from "../../db.js"
 import { requireFeature } from "../../features.js"
 import { awsRelease, type ManagedDeploymentRelease } from "../../managed-deployments/config.js"
-import { jsonValidator, orgRoleRoute, paramValidator, tokenRoute } from "../../middleware/index.js"
+import { jsonValidator, orgPermissionRoute, paramValidator, tokenRoute } from "../../middleware/index.js"
 import { jsonResponse } from "../../openapi.js"
 import { checkRateLimit } from "../../utils/rate-limit.js"
 import type { OrgRouteVariables } from "./shared.js"
-import { ensureOrganizationSuperAdmin, orgAccessFailureStatus } from "./shared.js"
 
 const PATH = "/v1/managed-deployments"
 const RUN_LIFETIME_MS = 3 * 60 * 60 * 1000
@@ -113,7 +112,7 @@ function bearerToken(header: string | undefined) {
 
 export function registerManagedDeploymentRoutes<T extends { Variables: OrgRouteVariables }>(app: Hono<T>) {
   app.get(`${PATH}/configuration`, operation("Read which clouds can be launched", "Lists the clouds this OpenWork environment can install into and the published installer version for each.", managedDeploymentConfigurationSchema),
-    orgRoleRoute(["admin"]), requireFeature("managedDeployments"), (c) => {
+    orgPermissionRoute("deployments.view"), requireFeature("managedDeployments"), (c) => {
       const release = awsRelease()
       return c.json(managedDeploymentConfigurationSchema.parse({
         providers: [
@@ -126,7 +125,7 @@ export function registerManagedDeploymentRoutes<T extends { Variables: OrgRouteV
     })
 
   app.get(PATH, operation("List the organization's managed deployments", "Returns each installation in the organization's own cloud accounts with its latest installer run, health checks and available update.", managedDeploymentListSchema),
-    orgRoleRoute(["admin"]), requireFeature("managedDeployments"), async (c) => {
+    orgPermissionRoute("deployments.view"), requireFeature("managedDeployments"), async (c) => {
       const org = c.get("organizationContext")
       if (!org) return c.json({ error: "organization_not_found" }, 404)
       const rows = await db.select().from(ManagedDeploymentTable).where(eq(ManagedDeploymentTable.org_id, org.organization.id)).limit(100)
@@ -134,9 +133,7 @@ export function registerManagedDeploymentRoutes<T extends { Variables: OrgRouteV
     })
 
   app.post(PATH, operation("Create a managed deployment", "Records a new installation target (cloud account, region, address). Nothing is launched until an owner prepares and approves it in their cloud.", managedDeploymentSchema),
-    orgRoleRoute(["super-admin"]), requireFeature("managedDeployments"), jsonValidator(managedDeploymentInputSchema), async (c) => {
-      const permission = ensureOrganizationSuperAdmin(c, "Only owners and super-admins can create deployments.")
-      if (!permission.ok) return c.json(permission.response, orgAccessFailureStatus(permission.response))
+    orgPermissionRoute("deployments.manage"), requireFeature("managedDeployments"), jsonValidator(managedDeploymentInputSchema), async (c) => {
       const org = c.get("organizationContext")
       if (!org) return c.json({ error: "organization_not_found" }, 404)
       const body = c.req.valid("json")
@@ -152,9 +149,7 @@ export function registerManagedDeploymentRoutes<T extends { Variables: OrgRouteV
     })
 
   app.delete(`${PATH}/:deploymentId`, operation("Remove a deployment that was never installed", "Deletes a deployment record that never reached the customer's cloud. Installed deployments stay tracked and answer 409.", acceptedSchema),
-    orgRoleRoute(["super-admin"]), requireFeature("managedDeployments"), paramValidator(deploymentParam), async (c) => {
-      const permission = ensureOrganizationSuperAdmin(c, "Only owners and super-admins can remove deployments.")
-      if (!permission.ok) return c.json(permission.response, orgAccessFailureStatus(permission.response))
+    orgPermissionRoute("deployments.manage"), requireFeature("managedDeployments"), paramValidator(deploymentParam), async (c) => {
       const org = c.get("organizationContext")
       if (!org) return c.json({ error: "organization_not_found" }, 404)
       const id = c.req.valid("param").deploymentId
@@ -175,9 +170,7 @@ export function registerManagedDeploymentRoutes<T extends { Variables: OrgRouteV
     })
 
   app.post(`${PATH}/:deploymentId/launch`, operation("Prepare an install, retry or approved update", "Creates or reuses an installer run pinned to the published release and returns a console approval link (install) or an account-checked cloud shell command (retry, update).", managedDeploymentLaunchSchema),
-    orgRoleRoute(["super-admin"]), requireFeature("managedDeployments"), paramValidator(deploymentParam), jsonValidator(managedDeploymentLaunchInputSchema), async (c) => {
-      const permission = ensureOrganizationSuperAdmin(c, "Only owners and super-admins can launch or update deployments.")
-      if (!permission.ok) return c.json(permission.response, orgAccessFailureStatus(permission.response))
+    orgPermissionRoute("deployments.manage"), requireFeature("managedDeployments"), paramValidator(deploymentParam), jsonValidator(managedDeploymentLaunchInputSchema), async (c) => {
       const org = c.get("organizationContext")
       if (!org) return c.json({ error: "organization_not_found" }, 404)
       const id = c.req.valid("param").deploymentId
