@@ -8,6 +8,7 @@ import {
   LockKeyhole,
   MessageCircle,
   ScrollText,
+  Server,
   Plug,
   SlidersHorizontal,
   Sparkles,
@@ -24,6 +25,7 @@ import {
   getBillingRoute,
   getDesktopPoliciesRoute,
   getDiagnosticsRoute,
+  getDeploymentsRoute,
   getLibraryRoute,
   getMarketplacesRoute,
   getMcpConnectionsRoute,
@@ -79,6 +81,8 @@ export type BuildDashboardNavSectionsInput = {
   runtimeConfigLoaded: boolean;
   /** How many Library items wait on the viewer's sign-in. */
   libraryNeedsSignIn?: number;
+  /** The managedDeployments feature is on for this organization. */
+  managedDeployments?: boolean;
 };
 
 export function buildDashboardNavSections({
@@ -87,6 +91,7 @@ export function buildDashboardNavSections({
   capabilities,
   runtimeConfigLoaded,
   libraryNeedsSignIn = 0,
+  managedDeployments = false,
 }: BuildDashboardNavSectionsInput): DashboardNavSection[] {
   const workflowsEnabled = capabilities.workflows;
   const showWeb = runtimeConfigLoaded && capabilities.openworkWeb;
@@ -116,6 +121,7 @@ export function buildDashboardNavSections({
         { href: getMcpConnectionsRoute(orgSlug), label: "Connectors", icon: Plug, badge: "MCPs" },
         { href: getAiGatewayRoute(orgSlug), label: "AI Gateway", icon: Sparkles },
         { href: getDesktopPoliciesRoute(orgSlug), label: "Desktop policies", icon: Laptop },
+        ...(managedDeployments ? [{ href: getDeploymentsRoute(orgSlug), label: "Deployments", icon: Server }] : []),
       ]
     : [];
   const observabilityItems: DashboardNavItem[] = orgSlug
@@ -176,6 +182,7 @@ const PAGE_KEYWORDS: Record<string, string[]> = {
   "Bring Your Own Keys (Legacy)": ["llm", "provider", "byok", "api key"],
   Connectors: ["mcp", "integrations", "servers", "connect"],
   "Desktop policies": ["policy", "mdm", "lock", "desktop"],
+  Deployments: ["aws", "self-hosted", "byoc", "install", "health", "status"],
   Dashboards: ["boards", "apps"],
   Diagnostics: ["health", "debug", "troubleshooting"],
   General: ["organization", "workspace"],
