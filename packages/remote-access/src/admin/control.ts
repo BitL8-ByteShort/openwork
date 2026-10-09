@@ -3,6 +3,7 @@ import { BridgeError, record, type Host } from "../contract/index.js";
 import type { OpenWorkAdapter } from "../adapters/types.js";
 import type { Store } from "../storage/store.js";
 import type { Pairing } from "../auth/pairing.js";
+import { normalizeFeatureGrants } from '../auth/feature-access.js';
 
 interface Options {
   store: Store;
@@ -29,7 +30,7 @@ export function createLocalControls(options: Options) {
     if (
       !record(value) ||
       Object.keys(value).some(
-        (k) => !["workspaceIds", "allWorkspaces"].includes(k),
+        (k) => !["workspaceIds", "allWorkspaces", "features"].includes(k),
       ) ||
       !Array.isArray(value.workspaceIds) ||
       value.workspaceIds.length > 100 ||
@@ -40,6 +41,7 @@ export function createLocalControls(options: Options) {
         typeof value.allWorkspaces !== "boolean")
     )
       throw new BridgeError("INVALID_REQUEST", 400);
+    const features = value.features === undefined ? undefined : normalizeFeatureGrants(value.features);
     const workspaces = await options.adapter.listWorkspaces();
     ready();
     if (
@@ -52,6 +54,7 @@ export function createLocalControls(options: Options) {
     return {
       workspaceIds: [...new Set(value.workspaceIds)] as string[],
       allWorkspaces: value.allWorkspaces === true,
+      features,
     };
   };
   return {
@@ -70,6 +73,7 @@ export function createLocalControls(options: Options) {
             name: d.name,
             workspaceIds: d.workspaceIds,
             allWorkspaces: d.allWorkspaces ?? false,
+            features: normalizeFeatureGrants(d.features),
             active: d.active,
           })),
       };
@@ -96,6 +100,7 @@ export function createLocalControls(options: Options) {
         id,
         access.workspaceIds,
         access.allWorkspaces,
+        access.features,
       );
       return { approved: true };
     },
@@ -114,6 +119,7 @@ export function createLocalControls(options: Options) {
         if (!device) throw new BridgeError("NOT_FOUND", 404);
         device.workspaceIds = access.workspaceIds;
         device.allWorkspaces = access.allWorkspaces;
+        if (access.features !== undefined) device.features = access.features;
       });
       options.closeDeviceStreams(id);
       return { updated: true };

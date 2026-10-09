@@ -140,7 +140,7 @@ export class Pairing {
     }
     return { state: c.state };
   }
-  async approve(id: string, workspaceIds: string[], allWorkspaces = false) {
+  async approve(id: string, workspaceIds: string[], allWorkspaces = false, features?: import('../contract/index.js').DeviceFeatureGrants) {
     const c = this.claims.get(id);
     if (!c || this.now() >= c.expires)
       throw new BridgeError("PAIRING_EXPIRED", 409);
@@ -164,6 +164,7 @@ export class Pairing {
           tokenHash,
           workspaceIds: [...new Set(workspaceIds)],
           allWorkspaces,
+          features,
           active: false,
           revoked: false,
         }),

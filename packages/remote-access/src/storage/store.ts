@@ -6,7 +6,9 @@ import {
   BridgeError,
   record,
   type MutationReceipt,
+  type DeviceFeatureGrants,
 } from "../contract/index.js";
+import { normalizeFeatureGrants } from '../auth/feature-access.js';
 export interface Device {
   id: string;
   deviceId: string;
@@ -14,6 +16,7 @@ export interface Device {
   tokenHash: string;
   workspaceIds: string[];
   allWorkspaces?: boolean;
+  features?: DeviceFeatureGrants;
   active: boolean;
   revoked: boolean;
 }
@@ -43,6 +46,8 @@ function valid(s: unknown): s is State {
   )
     return false;
   if (s.devices.length > 1000) return false;
+  try { for (const device of s.devices) normalizeFeatureGrants(record(device) ? device.features : null); }
+  catch { return false; }
   return (
     s.devices.every(
       (d) =>
