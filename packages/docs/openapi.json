@@ -33192,6 +33192,68 @@
                               "route53ZoneId": {
                                 "type": "string",
                                 "pattern": "^Z[A-Z0-9]{1,31}$"
+                              },
+                              "network": {
+                                "default": {
+                                  "mode": "dedicated"
+                                },
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "dedicated"
+                                      }
+                                    },
+                                    "required": [
+                                      "mode"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "existing"
+                                      },
+                                      "vpcId": {
+                                        "type": "string",
+                                        "pattern": "^vpc-[0-9a-f]{8,17}$"
+                                      },
+                                      "serviceSubnetIds": {
+                                        "minItems": 2,
+                                        "maxItems": 6,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                        }
+                                      },
+                                      "loadBalancerSubnetIds": {
+                                        "minItems": 2,
+                                        "maxItems": 6,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                        }
+                                      },
+                                      "ecsClusterArn": {
+                                        "type": "string",
+                                        "maxLength": 300
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "vpcId",
+                                      "serviceSubnetIds",
+                                      "loadBalancerSubnetIds"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -33451,6 +33513,7 @@
                                           "type": "string",
                                           "enum": [
                                             "release_verification_failed",
+                                            "network_check_failed",
                                             "infrastructure_failed",
                                             "certificate_failed",
                                             "service_unhealthy",
@@ -33709,6 +33772,68 @@
                         "route53ZoneId": {
                           "type": "string",
                           "pattern": "^Z[A-Z0-9]{1,31}$"
+                        },
+                        "network": {
+                          "default": {
+                            "mode": "dedicated"
+                          },
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "const": "dedicated"
+                                }
+                              },
+                              "required": [
+                                "mode"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "const": "existing"
+                                },
+                                "vpcId": {
+                                  "type": "string",
+                                  "pattern": "^vpc-[0-9a-f]{8,17}$"
+                                },
+                                "serviceSubnetIds": {
+                                  "minItems": 2,
+                                  "maxItems": 6,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                  }
+                                },
+                                "loadBalancerSubnetIds": {
+                                  "minItems": 2,
+                                  "maxItems": 6,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                  }
+                                },
+                                "ecsClusterArn": {
+                                  "type": "string",
+                                  "maxLength": 300
+                                }
+                              },
+                              "required": [
+                                "mode",
+                                "vpcId",
+                                "serviceSubnetIds",
+                                "loadBalancerSubnetIds"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -33968,6 +34093,7 @@
                                     "type": "string",
                                     "enum": [
                                       "release_verification_failed",
+                                      "network_check_failed",
                                       "infrastructure_failed",
                                       "certificate_failed",
                                       "service_unhealthy",
@@ -34214,6 +34340,68 @@
                           "route53ZoneId": {
                             "type": "string",
                             "pattern": "^Z[A-Z0-9]{1,31}$"
+                          },
+                          "network": {
+                            "default": {
+                              "mode": "dedicated"
+                            },
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "mode": {
+                                    "type": "string",
+                                    "const": "dedicated"
+                                  }
+                                },
+                                "required": [
+                                  "mode"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "mode": {
+                                    "type": "string",
+                                    "const": "existing"
+                                  },
+                                  "vpcId": {
+                                    "type": "string",
+                                    "pattern": "^vpc-[0-9a-f]{8,17}$"
+                                  },
+                                  "serviceSubnetIds": {
+                                    "minItems": 2,
+                                    "maxItems": 6,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                    }
+                                  },
+                                  "loadBalancerSubnetIds": {
+                                    "minItems": 2,
+                                    "maxItems": 6,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                    }
+                                  },
+                                  "ecsClusterArn": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  }
+                                },
+                                "required": [
+                                  "mode",
+                                  "vpcId",
+                                  "serviceSubnetIds",
+                                  "loadBalancerSubnetIds"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -34482,6 +34670,68 @@
                             "route53ZoneId": {
                               "type": "string",
                               "pattern": "^Z[A-Z0-9]{1,31}$"
+                            },
+                            "network": {
+                              "default": {
+                                "mode": "dedicated"
+                              },
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "mode": {
+                                      "type": "string",
+                                      "const": "dedicated"
+                                    }
+                                  },
+                                  "required": [
+                                    "mode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "mode": {
+                                      "type": "string",
+                                      "const": "existing"
+                                    },
+                                    "vpcId": {
+                                      "type": "string",
+                                      "pattern": "^vpc-[0-9a-f]{8,17}$"
+                                    },
+                                    "serviceSubnetIds": {
+                                      "minItems": 2,
+                                      "maxItems": 6,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                      }
+                                    },
+                                    "loadBalancerSubnetIds": {
+                                      "minItems": 2,
+                                      "maxItems": 6,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "pattern": "^subnet-[0-9a-f]{8,17}$"
+                                      }
+                                    },
+                                    "ecsClusterArn": {
+                                      "type": "string",
+                                      "maxLength": 300
+                                    }
+                                  },
+                                  "required": [
+                                    "mode",
+                                    "vpcId",
+                                    "serviceSubnetIds",
+                                    "loadBalancerSubnetIds"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           },
                           "required": [
@@ -34741,6 +34991,7 @@
                                         "type": "string",
                                         "enum": [
                                           "release_verification_failed",
+                                          "network_check_failed",
                                           "infrastructure_failed",
                                           "certificate_failed",
                                           "service_unhealthy",
@@ -35463,6 +35714,7 @@
                     "type": "string",
                     "enum": [
                       "release_verification_failed",
+                      "network_check_failed",
                       "infrastructure_failed",
                       "certificate_failed",
                       "service_unhealthy",
