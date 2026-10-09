@@ -1347,7 +1347,7 @@ const remoteAccess = createRemoteAccessManager({
     const adapter = new remoteAccessLibrary.OpenWorkV2(async () => {
       const info = assertOpenworkServerReady(await runtimeManager.openworkServerInfo());
       return { origin: info.baseUrl, token: info.ownerToken ?? info.clientToken };
-    }, true, remoteServerVersion, true, true, true, true, true);
+    }, true, remoteServerVersion, true, true, true, true, true, true);
     await adapter.requireChatEngine();
     return remoteAccessLibrary.startBridge({ adapter, stateDirectory: remoteStateRoot,
       platform: remotePlatform, architecture: process.arch, origin });

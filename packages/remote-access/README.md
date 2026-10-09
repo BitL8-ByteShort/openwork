@@ -60,3 +60,5 @@ The build bundles runtime dependencies and writes `LICENSE` and `THIRD_PARTY_NOT
 The qualified source candidate also supports passive [Workspace changes](docs/changes.md), including edits made outside the selected chat. This uses the same explicit host file-transfer grant.
 
 The qualified source candidate adds [granular chat groups](docs/groups.md) inside approved projects. Group removal keeps the chats; whole-state replacement and automatic retries are unavailable.
+
+Chat copy/delete behavior, recovery and limits: [Chat actions](docs/session-actions.md).

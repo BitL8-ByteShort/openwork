@@ -1,4 +1,5 @@
 import {registerSessionGroupRoutes} from './routes/session-groups.js';
+import {registerSessionActionRoutes} from './routes/session-actions.js';
 import { EventHub } from "./events/hub.js";
 import Fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -194,6 +195,7 @@ export function createServers(o: Options) {
   registerArtifactRoutes({ remote, adapter: o.adapter, operations: featureOperations, session, device, envelope });
   registerChangeRoutes({ remote, adapter: o.adapter, operations: featureOperations, session, device, envelope });
   registerSessionGroupRoutes({remote,adapter:o.adapter,operations:featureOperations,ledger,device,envelope});
+  registerSessionActionRoutes({remote,adapter:o.adapter,operations:featureOperations,ledger,device,envelope});
   remote.post("/v1/pairings/poll", async (req) => {
     const b = body(req.body, ["claimId", "pollToken"]);
     if (typeof b.claimId !== "string" || typeof b.pollToken !== "string")

@@ -1323,6 +1323,94 @@
           "pattern": "^[a-f0-9]{64}$"
         }
       }
+    },
+    "SessionActionPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "title",
+        "running",
+        "forkAvailable",
+        "deleteAvailable",
+        "deleteReason"
+      ],
+      "properties": {
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "forkAvailable": {
+          "type": "boolean"
+        },
+        "deleteAvailable": {
+          "type": "boolean"
+        },
+        "deleteReason": {
+          "enum": [
+            "running",
+            "linkedChats",
+            null
+          ]
+        }
+      }
+    },
+    "SessionFork": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "revision",
+        "beforeMessageId"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "beforeMessageId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SessionDelete": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "revision"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
     }
   }
 }
