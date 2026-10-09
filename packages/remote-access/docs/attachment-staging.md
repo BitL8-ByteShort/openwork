@@ -47,7 +47,7 @@ staging namespace are cleaned without following symlinks. Shutdown cancels and
 drains operations before the state store closes. Native committed inbox files
 are never deleted by staging cleanup.
 
-Mac and actual NUC each passed 106 package tests, typecheck and build with
+Mac and actual NUC each passed 115 package tests, typecheck and build with
 identical production-source hashes. Real scoped requests to the native adapter
 materialized two files in one disposable prompt on each host; same-UUID replay
 produced no second user prompt. Comparable chats, models, defaults, permissions,
@@ -58,3 +58,18 @@ Still required: native pickers, protected phone drafts/bytes, progress/retry UI,
 photo conversion policy and tests, paired-client qualification on both hosts,
 and physical acceptance through the next TestFlight candidate. Production
 capability advertisement and preview replacement wait for that client slice.
+
+## Bounded history and phone foundation
+
+The native history endpoint embeds base64 file contents. A dedicated streaming
+projection skips only native message `files[].data` string values and emits safe
+filename labels. Normal projected JSON remains limited to 8 MiB; native history
+wire is capped at 64 MiB. A read-only one-message fallback retains the cursor
+when a larger page exceeds that limit. This does not expand generic JSON limits
+or expose native URIs or file bytes to the phone.
+
+Nine regression cases cover large files, attachment-only messages, unrelated
+large metadata, malformed JSON/UTF-8 and bounded fallback. Mac and actual NUC
+passed 115 tests/22 files, typecheck and build with identical production source.
+Read-only native history checks on both hosts returned PNG/PDF labels in 1,853
+bytes. Accepted upload/prompt evidence was reused; no new inference was needed.
