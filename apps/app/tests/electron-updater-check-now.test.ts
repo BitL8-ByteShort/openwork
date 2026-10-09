@@ -229,6 +229,20 @@ describe("Settings staged-update discovery", () => {
     else process.env.DEV = originalDev;
   });
 
+  test("preview manual policy hides automatic-update controls and prevents checking", async () => {
+    window.__OPENWORK_ELECTRON__!.updater!.getChannel = async () => ({ channel: "stable", currentVersion, feedUrl: "", supported: false, reason: "Remote Preview uses manual updates." });
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    autoCheck = true;
+    await act(async () => root.render(createElement(Harness)));
+    expect(host.textContent).toContain("Remote Preview uses manual updates.");
+    expect(host.textContent).not.toContain("Check automatically");
+    expect(host.textContent).not.toContain("Download automatically");
+    expect(button("Check now").disabled).toBe(true);
+    expect(checks).toEqual([]);
+    expect(downloads).toEqual([]);
+  });
+
   test("idle manual check retains stable selection and automatic download", async () => {
     expect(host.querySelector('[data-testid="updates-current-version"]')?.textContent).toBe(`v${installedVersion}`);
     expect(host.querySelector('[data-testid="updates-latest-version"]')?.textContent).toBe("Not checked");

@@ -23,7 +23,7 @@ import { globalOpencodeConfigDir, workspaceOpencodeConfigCandidates } from "@ope
 import { configureFakeMediaForTests, installMediaPermissionHandlers } from "./media-permissions.mjs";
 import { registerMigrationIpc } from "./migration.mjs";
 import { createRuntimeManager, createSystemCaCertificateVerifyProc } from "./runtime.mjs";
-import { registerUpdaterIpc, resolveAppVersion } from "./updater.mjs";
+import { registerUpdaterIpc, resolveAppVersion, resolveDesktopUpdatePolicy, MANUAL_PREVIEW_UPDATE_REASON } from "./updater.mjs";
 import { createUiControlServer } from "./ui-control-server.mjs";
 import { createApplicationMenu } from "./app-menu.mjs";
 import { createNativeContextMenus } from "./context-menu.mjs";
@@ -90,6 +90,7 @@ import { createQuitSequencer } from "./quit-sequence.mjs";
 import { createRemoteAccessManager, assertRemoteAccessSender } from "./remote-access.mjs";
 import { createRemoteNetwork } from "./remote-access-network.mjs";
 import { createRemoteAccessFeature } from "./remote-access-feature.mjs";
+import { adoptPreviewProfile } from "./preview-adoption.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, "../../..");
@@ -117,6 +118,7 @@ const pty = require(["node", "pty"].join("-"));
 const NATIVE_DEEP_LINK_EVENT = "openwork:deep-link-native";
 const AUTOMATION_RUNNER_CREDENTIAL_REJECTED_EVENT = "openwork:automation-runner:credential-rejected";
 const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
+const desktopUpdatePolicy = resolveDesktopUpdatePolicy({ isPackaged: app.isPackaged, metadata: desktopPackageMetadata });
 const DESKTOP_DISTRIBUTION = resolveDesktopDistribution({
   isPackaged: app.isPackaged,
   packageFlavor: Reflect.get(desktopPackageMetadata, "openworkDistribution"),
@@ -126,6 +128,7 @@ const TAURI_APP_IDENTIFIER = DESKTOP_DISTRIBUTION.appIdentifier;
 const DEV_APP_IDENTIFIER = `${DESKTOP_DISTRIBUTION.appIdentifier}.dev`;
 const DESKTOP_PROTOCOL_SCHEME = DESKTOP_DISTRIBUTION.protocolScheme;
 const DEFAULT_APP_NAME =
+  (Reflect.get(desktopPackageMetadata, "openworkProductName") === "OpenWork Remote Preview" ? "OpenWork Remote Preview" : "") ||
   (!app.isPackaged ? process.env.OPENWORK_ELECTRON_APP_NAME?.trim() : "") ||
   (isDevMode ? `${DESKTOP_DISTRIBUTION.appName} - Dev` : DESKTOP_DISTRIBUTION.appName);
 const BLANK_SLATE_LAUNCH = resolveBlankSlateLaunch({
@@ -246,6 +249,24 @@ const userDataPath = BLANK_SLATE_LAUNCH.userDataPath ?? resolveUserDataPath({
   userDataOverride: process.env.OPENWORK_ELECTRON_USERDATA,
 });
 app.setPath("userData", userDataPath);
+// Fork packaging opts in through bundled metadata. Adopt only after acquiring
+// the same profile singleton as stable, and before opening workspace stores.
+let previewProfileLock = null;
+if (app.isPackaged && Reflect.get(desktopPackageMetadata, "openworkProductName") === "OpenWork Remote Preview") {
+  previewProfileLock = app.requestSingleInstanceLock();
+  if (!previewProfileLock) app.exit(0);
+  try {
+    const bridgePath = process.platform === "darwin"
+      ? path.join(os.homedir(), "Library/Application Support/OpenWorkRemote")
+      : path.join(process.env.XDG_STATE_HOME && path.isAbsolute(process.env.XDG_STATE_HOME)
+        ? process.env.XDG_STATE_HOME : path.join(os.homedir(), ".local/state"), "openwork-remote");
+    await adoptPreviewProfile({ profilePath: userDataPath, bridgePath,
+      backupRoot: path.join(app.getPath("appData"), "com.saltypanda.openworkremotepreview", "backups") });
+  } catch (error) {
+    dialog.showErrorBox("OpenWork Remote Preview", String(error?.message ?? error));
+    app.exit(1);
+  }
+}
 const linuxDesktopIntegration = createLinuxDesktopIntegration({
   app,
   dialog,
@@ -2081,8 +2102,8 @@ const desktopCommandHandlers = {
   "updaterEnvironment": async (event, ...args) => {
       const executablePath = app.isPackaged ? app.getPath("exe") : process.execPath;
       return {
-        supported: true,
-        reason: null,
+        supported: desktopUpdatePolicy !== "manual",
+        reason: desktopUpdatePolicy === "manual" ? MANUAL_PREVIEW_UPDATE_REASON : null,
         executablePath,
         appBundlePath:
           process.platform === "darwin"
@@ -2688,6 +2709,7 @@ if (isDevMode && !app.isPackaged) {
 registerMigrationIpc({ app, ipcMain });
 const { ensureAutoUpdater } = registerUpdaterIpc({
   app,
+  updatePolicy: desktopUpdatePolicy,
   ipcMain,
   getMainWindow: () => mainWindow,
   // All distributions intentionally share one application identifier, so they also
@@ -2704,7 +2726,7 @@ const { ensureAutoUpdater } = registerUpdaterIpc({
   assertActivation: assertDesktopActivation,
 });
 
-if (!app.requestSingleInstanceLock()) {
+if (!(previewProfileLock ?? app.requestSingleInstanceLock())) {
   if (isDevMode && !app.isPackaged) {
     console.error(`[openwork] Another OpenWork dev instance already holds this profile directory:
   ${app.getPath("userData")}

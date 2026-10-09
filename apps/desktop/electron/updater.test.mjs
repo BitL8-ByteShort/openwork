@@ -11,6 +11,7 @@ import {
   evalUpdaterFeedUrl,
   preventPendingUpdaterInstall,
   registerUpdaterIpc,
+  resolveDesktopUpdatePolicy,
   staleUpdaterStatePaths,
   targetedStableUpdaterFeed,
 } from "./updater.mjs";
@@ -82,9 +83,9 @@ function fakeUpdaterHarness({ version, platform, manualNativeStaging }) {
 }
 
 /**
- * @param {{ version: string, platform?: string, manualNativeStaging?: boolean, nativeStagingTimeoutMs?: number, assertActivation?: () => void }} options
+ * @param {{ version: string, platform?: string, manualNativeStaging?: boolean, nativeStagingTimeoutMs?: number, assertActivation?: () => void, updatePolicy?: string }} options
  */
-async function registerFakeUpdaterIpc({ version, platform = "linux", manualNativeStaging = false, nativeStagingTimeoutMs, assertActivation }, { arch = process.arch, runningUnderARM64Translation = false } = {}) {
+async function registerFakeUpdaterIpc({ version, platform = "linux", manualNativeStaging = false, nativeStagingTimeoutMs, assertActivation, updatePolicy }, { arch = process.arch, runningUnderARM64Translation = false } = {}) {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "openwork-updater-test-"));
   const handlers = new Map();
   const harness = fakeUpdaterHarness({ version, platform, manualNativeStaging });
@@ -112,10 +113,36 @@ async function registerFakeUpdaterIpc({ version, platform = "linux", manualNativ
     nativeStagingTimeoutMs,
     shipItDefaultsDomain: "test.openwork.ShipIt",
     writeDefaults: async (args) => { defaultsWrites.push(args); },
+    ...(updatePolicy ? { updatePolicy } : {}),
     ...(assertActivation ? { assertActivation } : {}),
   });
   return { tempDir, handlers, defaultsWrites, ...harness };
 }
+
+describe("fork manual update policy", () => {
+  it("uses bundled policy for packaged builds, keeping official updates enabled", () => {
+    assert.equal(resolveDesktopUpdatePolicy({ isPackaged: true, env: { OPENWORK_ELECTRON_UPDATE_POLICY: "manual" } }), "official");
+    assert.equal(resolveDesktopUpdatePolicy({ isPackaged: true, metadata: { openworkUpdatePolicy: "manual" } }), "manual");
+    assert.equal(resolveDesktopUpdatePolicy({ isPackaged: false, env: { OPENWORK_ELECTRON_UPDATE_POLICY: "manual" } }), "manual");
+  });
+  it("cannot load, download, install or recover an official update", async () => {
+    const harness = await registerFakeUpdaterIpc({ version: "0.18.58", updatePolicy: "manual" });
+    try {
+      for (const name of ["check", "download", "installAndRestart", "setChannel"]) {
+        const result = await harness.handlers.get(`openwork:updater:${name}`)(null, "stable");
+        assert.match(result.reason, /Remote Preview.*manual/i);
+      }
+      for (const name of ["use", "restorePrevious"]) {
+        const result = await harness.handlers.get(`openwork:recovery:${name}`)(null, "0.18.58");
+        assert.equal(result.ok, false);
+        assert.match(result.reason, /manual/i);
+      }
+      assert.deepEqual(harness.feeds, []);
+      assert.deepEqual(harness.calls, []);
+      assert.deepEqual(harness.defaultsWrites, []);
+    } finally { await rm(harness.tempDir, { recursive: true, force: true }); }
+  });
+});
 
 describe("staleUpdaterStatePaths", () => {
   it("targets the ShipIt cache on macOS", { skip: process.platform !== "darwin" }, () => {
