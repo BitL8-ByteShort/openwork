@@ -938,6 +938,87 @@
           ]
         }
       }
+    },
+    "ArtifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sessionId",
+        "name",
+        "mime",
+        "bytes",
+        "revision",
+        "sha256",
+        "previewKind"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^art_[a-f0-9]{32}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
+        },
+        "mime": {
+          "enum": [
+            "text/plain",
+            "image/png",
+            "image/jpeg",
+            "application/pdf",
+            "application/rtf"
+          ]
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20971520
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "previewKind": {
+          "enum": [
+            "text",
+            "image",
+            "pdf",
+            "shareOnly"
+          ]
+        }
+      }
+    },
+    "ArtifactCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "moreOnComputer"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/ArtifactRef"
+          }
+        },
+        "moreOnComputer": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }
