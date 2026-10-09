@@ -5,6 +5,16 @@ import { mkdtemp, mkdir, writeFile, readFile, stat, symlink, rm } from 'node:fs/
 import os from 'node:os';
 import path from 'node:path';
 
+test('preview keeps the official edition as the default protocol handler', async () => {
+  const { shouldRegisterDesktopProtocol } = await import('./preview-adoption.mjs');
+  const official = { isPackaged: true, metadata: {}, disabled: false, blankSlate: false, platform: 'darwin', appImage: false };
+  assert.equal(shouldRegisterDesktopProtocol(official), true);
+  assert.equal(shouldRegisterDesktopProtocol({ ...official, metadata: { openworkProductName: 'OpenWork Remote Preview' } }), false);
+  assert.equal(shouldRegisterDesktopProtocol({ ...official, isPackaged: false }), false);
+  assert.equal(shouldRegisterDesktopProtocol({ ...official, disabled: true }), false);
+  assert.equal(shouldRegisterDesktopProtocol({ ...official, platform: 'linux', appImage: true }), false);
+});
+
 test('packaged preview adoption backs up privately before recording the existing profile', async () => {
   assert.ok(existsSync(new URL('./preview-adoption.mjs', import.meta.url)), 'Packaged profile adoption is not implemented');
   const { adoptPreviewProfile } = await import('./preview-adoption.mjs');

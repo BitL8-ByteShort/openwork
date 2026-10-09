@@ -2,6 +2,11 @@ import { mkdir, readFile, writeFile, rename, readdir, lstat, copyFile, chmod, rm
 import path from 'node:path';
 
 const markerName = 'remote-preview-adoption.v1.json';
+/** @param {{isPackaged: boolean, metadata?: Record<string, unknown>, disabled: boolean, blankSlate: boolean, platform: string, appImage: boolean}} options */
+export function shouldRegisterDesktopProtocol({ isPackaged, metadata = {}, disabled, blankSlate, platform, appImage }) {
+  return isPackaged && metadata.openworkProductName !== 'OpenWork Remote Preview'
+    && !disabled && !blankSlate && !(platform === 'linux' && appImage);
+}
 async function copyPrivateTree(source, target, optional = false) {
   await mkdir(target, { mode: 0o700 });
   let entries;

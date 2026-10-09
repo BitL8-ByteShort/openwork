@@ -90,7 +90,7 @@ import { createQuitSequencer } from "./quit-sequence.mjs";
 import { createRemoteAccessManager, assertRemoteAccessSender } from "./remote-access.mjs";
 import { createRemoteNetwork } from "./remote-access-network.mjs";
 import { createRemoteAccessFeature } from "./remote-access-feature.mjs";
-import { adoptPreviewProfile } from "./preview-adoption.mjs";
+import { adoptPreviewProfile, shouldRegisterDesktopProtocol } from "./preview-adoption.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, "../../..");
@@ -235,12 +235,12 @@ function killTerminalsForWebContents(webContentsId) {
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_IDENTIFIER);
 if (BLANK_SLATE_LAUNCH.homePath) app.setPath("home", BLANK_SLATE_LAUNCH.homePath);
-if (
-  app.isPackaged
-  && !BLANK_SLATE_LAUNCH.enabled
-  && process.env.OPENWORK_ELECTRON_DISABLE_PROTOCOL_REGISTRATION !== "1"
-  && !(process.platform === "linux" && process.env.APPIMAGE)
-) {
+if (shouldRegisterDesktopProtocol({
+  isPackaged: app.isPackaged, metadata: desktopPackageMetadata,
+  blankSlate: BLANK_SLATE_LAUNCH.enabled,
+  disabled: process.env.OPENWORK_ELECTRON_DISABLE_PROTOCOL_REGISTRATION === "1",
+  platform: process.platform, appImage: Boolean(process.env.APPIMAGE),
+})) {
   app.setAsDefaultProtocolClient(DESKTOP_PROTOCOL_SCHEME);
 }
 const userDataPath = BLANK_SLATE_LAUNCH.userDataPath ?? resolveUserDataPath({
