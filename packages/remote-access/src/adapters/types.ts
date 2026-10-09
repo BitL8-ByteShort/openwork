@@ -2,6 +2,7 @@ import type {
   Host,
   ModelSelection,
   ModelSettings,
+  WorkspaceDefaults,
   SavedPermissions,
   Workspace,
   Session,
@@ -67,6 +68,8 @@ export interface OpenWorkAdapter {
   readSessionActions?(wid:string,sid:string,signal:AbortSignal):Promise<SessionActionPreview>;
   forkSession?(wid:string,sid:string,beforeMessageId:string|null,revision:string,signal:AbortSignal):Promise<string>;
   deleteSession?(wid:string,sid:string,revision:string,signal:AbortSignal):Promise<string>;
+  readWorkspaceDefaults?(wid:string,signal:AbortSignal,check?:()=>void):Promise<WorkspaceDefaults>;
+  setWorkspaceDefaults?(wid:string,selection:ModelSelection,revision:string,signal:AbortSignal,check?:()=>void):Promise<string>;
   create(wid: string): Promise<string>;
   rename(
     wid: string,

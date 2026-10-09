@@ -44,6 +44,7 @@ type WorkspaceKvRow<T> = WorkspaceKvStoredRow & {
 type WorkspaceKvDb = {
   get: (workspaceId: string) => WorkspaceKvStoredRow | undefined;
   upsert: (value: { workspaceId: string; valueJson: string; updatedAt: number }) => void;
+  compareAndSet: (value: { workspaceId: string; valueJson: string; updatedAt: number }, expected: WorkspaceKvStoredRow | undefined) => boolean;
 };
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -123,6 +124,19 @@ async function runtimeDb(path: string): Promise<RuntimeSqliteDatabase> {
 
 async function openTableDb(path: string, config: WorkspaceKvTableConfig): Promise<WorkspaceKvDb> {
   const runtime = await runtimeDb(path);
+  const compareAndSet: WorkspaceKvDb["compareAndSet"] = (value, expected) => {
+    const assignments = [`${config.valueColumn} = ?`, ...(config.schemaVersion ? [`${config.schemaVersion.name} = ${config.schemaVersion.value}`] : []), "updated_at = ?"];
+    const statement = expected
+      ? `UPDATE ${config.tableName} SET ${assignments.join(", ")} WHERE workspace_id = ? AND ${config.valueColumn} = ? AND updated_at IS ?`
+      : config.upsertSql.replace(/DO UPDATE SET.*$/, "DO NOTHING");
+    const bindings = expected
+      ? [value.valueJson, value.updatedAt, value.workspaceId, expected.valueJson, expected.updatedAt]
+      : [value.workspaceId, value.valueJson, value.updatedAt];
+    const changes = runtime.kind === "bun"
+      ? runtime.sqlite.query(statement).run(...bindings).changes
+      : runtime.sqlite.prepare(statement).run(...bindings).changes;
+    return Number(changes) === 1;
+  };
   if (runtime.kind === "bun") {
     runtime.sqlite.run(config.createTableSql);
     const db = runtime.db;
@@ -135,6 +149,7 @@ async function openTableDb(path: string, config: WorkspaceKvTableConfig): Promis
         updatedAt: integer("updated_at").notNull(),
       });
       return {
+        compareAndSet,
         get: (workspaceId) => db
           .select({ valueJson: table.valueJson, updatedAt: table.updatedAt })
           .from(table)
@@ -158,6 +173,7 @@ async function openTableDb(path: string, config: WorkspaceKvTableConfig): Promis
       updatedAt: integer("updated_at").notNull(),
     });
     return {
+      compareAndSet,
       get: (workspaceId) => db
         .select({ valueJson: table.valueJson, updatedAt: table.updatedAt })
         .from(table)
@@ -181,6 +197,7 @@ async function openTableDb(path: string, config: WorkspaceKvTableConfig): Promis
   const get = sqlite.prepare(config.selectSql);
   const upsert = sqlite.prepare(config.upsertSql);
   return {
+    compareAndSet,
     get: (workspaceId) => rowFromUnknown(get.get(workspaceId)),
     upsert: ({ workspaceId, valueJson, updatedAt }) => {
       upsert.run(workspaceId, valueJson, updatedAt);
@@ -273,6 +290,11 @@ export function createWorkspaceKvStore<T>(options: WorkspaceKvStoreOptions<T>) {
       await setSerialized(serverConfig, workspaceId, options.serialize(value), updatedAt);
     },
     setSerialized,
+    /** One SQLite statement rejects a changed raw value/version, including another connection. */
+    setIfUnchanged: async (serverConfig: ServerConfig, workspaceId: string, value: T, updatedAt: number, expected: WorkspaceKvStoredRow | undefined): Promise<boolean> => {
+      const db = await workspaceKvDb(runtimeDbPath(serverConfig), config);
+      return db.compareAndSet({ workspaceId, valueJson: options.serialize(value), updatedAt }, expected);
+    },
   };
 }
 

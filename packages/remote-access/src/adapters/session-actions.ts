@@ -20,14 +20,16 @@ export class NativeSessionActions {
   signal.throwIfAborted();const base=this.base(wid),target=base+'/session/'+id(sid);
   const session=object(object(await this.request(target,'GET',undefined,signal)).data);
   if(session.id!==sid)throw new BridgeError('NOT_FOUND',404);
-  if(typeof session.title!=='string'||session.title.length>4096||!record(session.time))throw new BridgeError('INVALID_UPSTREAM',502);
+  if((session.title!=null&&(typeof session.title!=='string'||session.title.length>4096))||!record(session.time))throw new BridgeError('INVALID_UPSTREAM',502);
+  // New native chats have no title until their first message.
+  const title=typeof session.title==='string'&&session.title.length ? session.title:'Untitled chat';
   const active=object(object(await this.request(base+'/session/active','GET',undefined,signal)).data);
   const children=object(await this.request(base+'/session?'+new URLSearchParams({parentID:sid,limit:'1'}),'GET',undefined,signal));
   if(!Array.isArray(children.data)||children.data.length>1||children.data.some(s=>!record(s)||s.parentID!==sid||typeof s.id!=='string'))throw new BridgeError('INVALID_UPSTREAM',502);
   const running=active[sid]!==undefined&&active[sid]!==null,linked=children.data.length>0;
-  const revision=createHash('sha256').update(canonical({id:sid,title:session.title,time:session.time,model:session.model??null,location:session.location??null,running,children:children.data.map(s=>object(s).id)})).digest('hex');
+  const revision=createHash('sha256').update(canonical({id:sid,title:session.title??null,time:session.time,model:session.model??null,location:session.location??null,running,children:children.data.map(s=>object(s).id)})).digest('hex');
   signal.throwIfAborted();
-  const preview:SessionActionPreview={revision,title:session.title,running,forkAvailable:!running,deleteAvailable:!running&&!linked,deleteReason:running?'running':linked?'linkedChats':null};
+  const preview:SessionActionPreview= {revision,title,running,forkAvailable:!running,deleteAvailable:!running&&!linked,deleteReason:running?'running':linked?'linkedChats':null};
   return {session,preview,target,base};
  }
  async read(wid:string,sid:string,signal:AbortSignal):Promise<SessionActionPreview>{return (await this.snapshot(wid,sid,signal)).preview;}

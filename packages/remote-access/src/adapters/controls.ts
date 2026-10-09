@@ -28,6 +28,22 @@ const text = (v: unknown, max = 200) => {
 };
 const hash = (v: unknown) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
+/** One catalog projection for chat controls and new-chat defaults. */
+export function normalizeModelCatalog(value: unknown) {
+  return array(object(value).data)
+      .map(object)
+      .filter((m) => m.enabled === true)
+      .map((m) => ({
+        providerId: text(m.providerID),
+        modelId: text(m.id),
+        name: text(m.name ?? m.id, 256),
+        variants: [
+          ...new Set(
+            array(m.variants ?? []).map((v) => text(object(v).id, 80)),
+          ),
+        ],
+      }));
+}
 export class UpstreamControls {
   constructor(
     private request: Request,
@@ -52,19 +68,7 @@ export class UpstreamControls {
           : null,
     };
     const catalog = object(await this.request(this.base + "/model"));
-    const models = array(catalog.data)
-      .map(object)
-      .filter((m) => m.enabled === true)
-      .map((m) => ({
-        providerId: text(m.providerID),
-        modelId: text(m.id),
-        name: text(m.name ?? m.id, 256),
-        variants: [
-          ...new Set(
-            array(m.variants ?? []).map((v) => text(object(v).id, 80)),
-          ),
-        ],
-      }));
+    const models = normalizeModelCatalog(catalog);
     return { current, models, revision: hash(current) };
   }
   private async idle(sid?: string) {

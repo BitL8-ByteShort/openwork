@@ -59,6 +59,11 @@ export interface ModelSettings {
   models: ModelOption[];
   revision: string;
 }
+export interface WorkspaceDefaults {
+  current: ModelSelection | null;
+  models: ModelOption[];
+  revision: string;
+}
 export interface SavedPermission {
   id: string;
   action: string;
