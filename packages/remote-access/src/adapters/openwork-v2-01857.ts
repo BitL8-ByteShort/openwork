@@ -1,3 +1,4 @@
+import {NativeSessionGroups,type GroupCommand} from './session-groups.js';
 import { UpstreamControls } from "./controls.js";
 import { normalizeQuestion, validateQuestionAnswers } from "./questions.js";
 import { NativeAttachments, InboxMultipart } from "./attachments.js";
@@ -81,6 +82,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     private qualifiedAttachments = false,
     private qualifiedArtifacts = false,
     private qualifiedChanges = false,
+    private qualifiedSessionGroups = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -215,6 +217,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       attachments: supported && this.qualifiedWrites && this.qualifiedAttachments,
       artifacts: supported && this.qualifiedArtifacts,
       changes: supported && this.qualifiedChanges,
+      sessionGroups: supported && this.qualifiedWrites && this.qualifiedSessionGroups,
     };
   }
   async listWorkspaces() {
@@ -261,6 +264,15 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     if (s.id !== sid) throw new BridgeError("NOT_FOUND", 404);
     return s;
   }
+  private nativeGroups = new NativeSessionGroups((route,method,body,signal)=>{
+    this.enabled('sessionGroups');
+    return this.request(route,method,body,signal);
+  },async(wid,sid,signal)=>{
+    const native=obj(obj(await this.request(this.base(wid)+'/session/'+safeId(sid),'GET',undefined,signal)).data);
+    if(native.id!==sid)throw new PreflightError('NOT_FOUND',404);
+  });
+  async readSessionGroups(wid:string,signal:AbortSignal){this.enabled('sessionGroups');return this.nativeGroups.read(wid,signal);}
+  async changeSessionGroup(wid:string,command:GroupCommand,revision:string,signal:AbortSignal){this.enabled('sessionGroups');return this.nativeGroups.apply(wid,command,revision,signal);}
   private async readFileContext(wid: string, sid: string, signal: AbortSignal) {
     signal.throwIfAborted();
     const registry = obj(await this.request('/workspaces', 'GET', undefined, signal));

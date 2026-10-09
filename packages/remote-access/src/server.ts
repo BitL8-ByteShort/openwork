@@ -1,3 +1,4 @@
+import {registerSessionGroupRoutes} from './routes/session-groups.js';
 import { EventHub } from "./events/hub.js";
 import Fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -192,6 +193,7 @@ export function createServers(o: Options) {
   const uploads = registerAttachmentRoutes({ remote, adapter: o.adapter, store: o.store, ledger, operations: featureOperations, session, device, envelope });
   registerArtifactRoutes({ remote, adapter: o.adapter, operations: featureOperations, session, device, envelope });
   registerChangeRoutes({ remote, adapter: o.adapter, operations: featureOperations, session, device, envelope });
+  registerSessionGroupRoutes({remote,adapter:o.adapter,operations:featureOperations,ledger,device,envelope});
   remote.post("/v1/pairings/poll", async (req) => {
     const b = body(req.body, ["claimId", "pollToken"]);
     if (typeof b.claimId !== "string" || typeof b.pollToken !== "string")
