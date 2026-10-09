@@ -6,6 +6,7 @@ import type {
   RemoteDevice,
   RemotePairing,
   RemoteProjectScope,
+  RemoteFeatureGrants,
 } from "@openwork/types/desktop-ipc";
 import {
   remoteAccessStatus,
@@ -65,10 +66,22 @@ const recovery: Record<string, string> = {
     "Remote access is not enabled for this installation. Your OpenWork administrator can enable this feature.",
 };
 
+const noFeatureGrants: RemoteFeatureGrants = {
+  fileTransfer: false,
+  workspaceAdministration: false,
+  automationManagement: false,
+};
+const featureGrants: { key: keyof RemoteFeatureGrants; label: string }[] = [
+  { key: "fileTransfer", label: "Files and attachments" },
+  { key: "workspaceAdministration", label: "Workspace settings and skills" },
+  { key: "automationManagement", label: "Scheduled work" },
+];
+
 type AccessEditor = RemoteProjectScope & {
   id: string;
   name: string;
   kind: "claim" | "device";
+  features: RemoteFeatureGrants;
 };
 
 export function RemoteAccessView() {
@@ -141,12 +154,13 @@ export function RemoteAccessView() {
       kind: "claim",
       workspaceIds: [],
       allWorkspaces: false,
+      features: { ...noFeatureGrants },
     });
   };
   const manage = (device: RemoteDevice) => {
     setRevoke(false);
     setError(null);
-    setEditor({ ...device, kind: "device" });
+    setEditor({ ...device, kind: "device", features: { ...noFeatureGrants, ...device.features } });
   };
   const closeEditor = () => {
     setEditor(null);
@@ -160,6 +174,7 @@ export function RemoteAccessView() {
           status?.workspaces.some((w) => w.id === id),
         ),
         allWorkspaces: editor.allWorkspaces,
+        features: editor.features,
       };
       if (editor.kind === "claim") await remoteAccessApprove(editor.id, scope);
       else await remoteAccessUpdateScope(editor.id, scope);
@@ -421,7 +436,7 @@ export function RemoteAccessView() {
                 ? `Disconnect ${editor?.name}?`
                 : editor?.kind === "claim"
                   ? `Allow ${editor.name} to access`
-                  : `${editor?.name} project access`}
+                  : `${editor?.name} access`}
             </DialogTitle>
           </DialogHeader>
           {revoke ? (
@@ -433,7 +448,7 @@ export function RemoteAccessView() {
             <>
               <fieldset disabled={busy} className="space-y-2">
                 <legend className="mb-3 text-sm text-muted-foreground">
-                  Chats and files in the projects you select.
+                  Chats in the projects you select.
                 </legend>
                 {status?.workspaces.map((workspace) => (
                   <label
@@ -486,6 +501,24 @@ export function RemoteAccessView() {
                   />
                   <span>Allow all current and future projects</span>
                 </label>
+              </fieldset>
+              <fieldset disabled={busy} className="space-y-2 border-t border-border pt-3">
+                <legend className="mb-2 text-sm text-muted-foreground">Additional access</legend>
+                {featureGrants.map(({ key, label }) => (
+                  <label key={key} className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+                    <Checkbox
+                      checked={editor?.features[key] ?? false}
+                      onCheckedChange={(checked) => setEditor((current) => current && {
+                        ...current, features: { ...current.features, [key]: checked },
+                      })}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+                <p className="text-sm text-muted-foreground">
+                  Allows this phone to transfer project files, change workspace settings and skills,
+                  or manage scheduled work when each option is selected.
+                </p>
               </fieldset>
               {editor?.kind === "claim" && !currentClaim && (
                 <p className="text-sm" role="alert">

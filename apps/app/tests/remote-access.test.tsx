@@ -108,7 +108,7 @@ test("pairing grants only selected projects unless future access is explicitly c
   await click(button("Allow access"));
   expect(calls.find((c) => c.command === "remoteAccessApprove")?.args).toEqual([
     "claim",
-    { workspaceIds: ["one"], allWorkspaces: false },
+    { workspaceIds: ["one"], allWorkspaces: false, features: { fileTransfer: false, workspaceAdministration: false, automationManagement: false } },
   ]);
 });
 
@@ -133,7 +133,7 @@ test("all current and future projects is an unchecked opt-in", async () => {
   await click(button("Allow access"));
   expect(calls.find((c) => c.command === "remoteAccessApprove")?.args).toEqual([
     "claim",
-    { workspaceIds: [], allWorkspaces: true },
+    { workspaceIds: [], allWorkspaces: true, features: { fileTransfer: false, workspaceAdministration: false, automationManagement: false } },
   ]);
 });
 
@@ -165,5 +165,60 @@ test("disconnecting requires an explicit confirmation and sends the selected dev
   await click(button("Disconnect phone"));
   expect(calls.find((c) => c.command === "remoteAccessRevoke")?.args).toEqual([
     "phone",
+  ]);
+});
+
+function featureToggle(name: string) {
+  const label = [...document.querySelectorAll("label")].find(
+    (element) => element.textContent?.trim() === name,
+  );
+  if (!label) throw new Error(`Missing feature grant: ${name}`);
+  return label;
+}
+
+test("feature grants are off on a new pairing and files require deliberate selection", async () => {
+  state.pending = [{ id: "claim", deviceName: "Test phone", expiresAt: new Date(Date.now() + 300000).toISOString() }];
+  await render();
+  await click(button("Review access"));
+  for (const name of ["Files and attachments", "Workspace settings and skills", "Scheduled work"]) {
+    expect(featureToggle(name).querySelector('[role="checkbox"]')?.getAttribute("aria-checked")).toBe("false");
+  }
+  await click(featureToggle("Files and attachments"));
+  expect(button("Allow access").disabled).toBe(true);
+  await click(featureToggle("Project One"));
+  await click(button("Allow access"));
+  expect(calls.find((c) => c.command === "remoteAccessApprove")?.args).toEqual([
+    "claim", { workspaceIds: ["one"], allWorkspaces: false, features: {
+      fileTransfer: true, workspaceAdministration: false, automationManagement: false,
+    } },
+  ]);
+});
+
+test("editing project scope preserves existing feature grants until explicitly changed", async () => {
+  state.devices = [{ id: "phone", name: "Test phone", workspaceIds: ["one"], allWorkspaces: false, active: true,
+    features: { fileTransfer: true, workspaceAdministration: false, automationManagement: true } }];
+  await render();
+  await click(button("Manage Test phone"));
+  expect(featureToggle("Files and attachments").querySelector('[role="checkbox"]')?.getAttribute("aria-checked")).toBe("true");
+  await click(featureToggle("Project Two"));
+  await click(button("Save changes"));
+  expect(calls.find((c) => c.command === "remoteAccessUpdateScope")?.args).toEqual([
+    "phone", { workspaceIds: ["one", "two"], allWorkspaces: false, features: {
+      fileTransfer: true, workspaceAdministration: false, automationManagement: true,
+    } },
+  ]);
+});
+
+test("turning off file access sends its revocation while retaining other grants", async () => {
+  state.devices = [{ id: "phone", name: "Test phone", workspaceIds: ["one"], allWorkspaces: false, active: true,
+    features: { fileTransfer: true, workspaceAdministration: true, automationManagement: false } }];
+  await render();
+  await click(button("Manage Test phone"));
+  await click(featureToggle("Files and attachments"));
+  await click(button("Save changes"));
+  expect(calls.find((c) => c.command === "remoteAccessUpdateScope")?.args).toEqual([
+    "phone", { workspaceIds: ["one"], allWorkspaces: false, features: {
+      fileTransfer: false, workspaceAdministration: true, automationManagement: false,
+    } },
   ]);
 });
