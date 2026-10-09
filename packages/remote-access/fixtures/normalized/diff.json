@@ -1,0 +1,10 @@
+{
+  "type": "FileDiff",
+  "value": {
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "changeId": "chg_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "binary": false,
+    "text": "--- a/notes/report.txt\n+++ b/notes/report.txt\n@@ -1 +1 @@\n-before\n+after\n",
+    "omitted": false
+  }
+}

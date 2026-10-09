@@ -14,6 +14,7 @@ import type {
   QuestionAnswers,
 } from "../contract/index.js";
 import type { ArtifactContext } from '../artifacts/catalog.js';
+import type { ChangeContext } from '../changes/catalog.js';
 export interface StagedAttachment { id: string; path: string; name: string; mime: string; bytes: number; sha256: string }
 export interface NativePromptFile { id: string; uri: string; name: string; mime: string; bytes: number; sha256: string }
 export interface AttachmentPrompt { text: string; messageId: string; files: NativePromptFile[] }
@@ -58,6 +59,7 @@ export interface OpenWorkAdapter {
   ): Promise<{ uri: string }>;
   sendAttachments?(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal): Promise<void>;
   readArtifactContext?(wid: string, sid: string, signal: AbortSignal): Promise<ArtifactContext>;
+  readChangeContext?(wid: string, sid: string, signal: AbortSignal): Promise<ChangeContext>;
   create(wid: string): Promise<string>;
   rename(
     wid: string,

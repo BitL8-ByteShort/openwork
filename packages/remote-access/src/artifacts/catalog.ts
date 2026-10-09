@@ -3,8 +3,7 @@ import { lstat, realpath, open } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, join, basename, extname, dirname } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { verifiedSessionRoots as roots } from '../filesystem/session-roots.js';
 import { BridgeError } from '../contract/index.js';
 import type { FeatureOperations } from '../auth/feature-access.js';
 import type { ArtifactCandidate } from './candidates.js';
@@ -25,34 +24,11 @@ type Lease = ReturnType<FeatureOperations['begin']>;
 type Fingerprint = { dev: number; ino: number; size: number; mtimeMs: number; ctimeMs: number; mode: number };
 type Entry = { device: string; wid: string; sid: string; path: string; root: string; execution: string; ref: ArtifactRef; fingerprint: Fingerprint; expires: number };
 const maxBytes = 20 * 1024 * 1024, maxRange = 1024 * 1024, lifetime = 15 * 60 * 1000;
-const exec = promisify(execFile);
 const within = (root: string, path: string) => { const r = relative(root, path); return r === '' || (!r.startsWith('..' + '/') && r !== '..' && !isAbsolute(r)); };
 const changed = () => new BridgeError('ARTIFACT_CHANGED', 409);
 const fingerprint = (s: Fingerprint): Fingerprint => ({ dev: s.dev, ino: s.ino, size: s.size, mtimeMs: s.mtimeMs, ctimeMs: s.ctimeMs, mode: s.mode });
 const same = (a: Fingerprint, b: Fingerprint) => JSON.stringify(fingerprint(a)) === JSON.stringify(fingerprint(b));
 
-async function directory(path: string) {
-  if (!isAbsolute(path) || /[\x00-\x1f\x7f]/.test(path)) throw changed();
-  const s = await lstat(path);
-  if (!s.isDirectory() || s.isSymbolicLink() || s.uid !== process.getuid?.()) throw changed();
-  return realpath(path);
-}
-async function roots(context: ArtifactContext) {
-  const root = await directory(context.workspaceDirectory), execution = await directory(context.executionDirectory);
-  if (!within(root, execution)) {
-    // Read-only Git metadata, fixed arguments and no shell/hooks. Native session
-    // ownership plus registered shared-repository membership is required.
-    const git = async (cwd: string, args: string[]) => (await exec('/usr/bin/git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args],
-      { cwd, timeout: 5000, maxBuffer: 128 * 1024, encoding: 'utf8' })).stdout;
-    const common = async (cwd: string) => realpath(resolve(cwd, (await git(cwd, ['rev-parse', '--git-common-dir'])).trim()));
-    if (await common(root) !== await common(execution)) throw changed();
-    const registered = (await git(root, ['worktree', 'list', '--porcelain', '-z'])).split('\0').filter(v => v.startsWith('worktree ')).map(v => v.slice(9));
-    let belongs = false;
-    for (const path of registered) { if (await realpath(path).catch(() => '') === execution) { belongs = true; break; } }
-    if (!belongs) throw changed();
-  }
-  return { root, execution };
-}
 function candidatePath(candidate: string, execution: string): string {
   if (!candidate || Buffer.byteLength(candidate) > 500 || /[\\\x00-\x1f\x7f]/.test(candidate) || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(candidate)) throw changed();
   const parts = candidate.startsWith('/') ? candidate.slice(1).split('/') : candidate.split('/');
@@ -126,7 +102,7 @@ export class ArtifactCatalog {
     lease.check(); this.sweep();
     const context = await this.context(wid, sid, lease.signal); lease.check();
     let verified: Awaited<ReturnType<typeof roots>>;
-    try { verified = await roots(context); } catch { lease.check(); return { items: [], moreOnComputer: true }; }
+    try { verified = await roots(context, lease.signal); } catch { lease.check(); return { items: [], moreOnComputer: true }; }
     const items: ArtifactRef[] = [], paths = new Set<string>(); let moreOnComputer = context.moreOnComputer || context.candidates.length > 100, measured = 0;
     const old = [...this.entries.values()].filter(e => e.device === device && e.wid === wid && e.sid === sid);
     for (const entry of old) this.entries.delete(entry.ref.id);
@@ -159,7 +135,7 @@ export class ArtifactCatalog {
     if (revision !== entry.ref.revision) throw changed();
     const context = await this.context(wid, sid, lease.signal); lease.check();
     try {
-      const verified = await roots(context);
+      const verified = await roots(context, lease.signal);
       if (verified.root !== entry.root || verified.execution !== entry.execution || !context.candidates.some(c => {
         try { return candidatePath(c.path, verified.execution) === entry.path; } catch { return false; }
       })) throw changed();

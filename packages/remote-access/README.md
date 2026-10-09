@@ -56,3 +56,5 @@ pnpm --filter @openwork/desktop typecheck:electron
 ```
 
 The build bundles runtime dependencies and writes `LICENSE` and `THIRD_PARTY_NOTICES.txt` next to `index.cjs`. Notices come from the actual esbuild dependency graph. `abstract-logging@2.0.1` links its MIT license instead of shipping a file; its attributed copy is under `licenses/`. OpenWork's existing root license remains unchanged. This package's original code is MIT licensed.
+
+The qualified source candidate also supports passive [Workspace changes](docs/changes.md), including edits made outside the selected chat. This uses the same explicit host file-transfer grant.

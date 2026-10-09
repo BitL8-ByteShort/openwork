@@ -23,6 +23,7 @@ import { Ledger } from "./mutations/ledger.js";
 import { registerQuestionRoutes } from "./routes/questions.js";
 import { registerAttachmentRoutes } from "./routes/attachments.js";
 import { registerArtifactRoutes } from './routes/artifacts.js';
+import { registerChangeRoutes } from './routes/changes.js';
 import { adminHTML, adminJS, adminCSS } from "./admin/public.js";
 interface Options {
   store: Store;
@@ -190,6 +191,7 @@ export function createServers(o: Options) {
   });
   const uploads = registerAttachmentRoutes({ remote, adapter: o.adapter, store: o.store, ledger, operations: featureOperations, session, device, envelope });
   registerArtifactRoutes({ remote, adapter: o.adapter, operations: featureOperations, session, device, envelope });
+  registerChangeRoutes({ remote, adapter: o.adapter, operations: featureOperations, session, device, envelope });
   remote.post("/v1/pairings/poll", async (req) => {
     const b = body(req.body, ["claimId", "pollToken"]);
     if (typeof b.claimId !== "string" || typeof b.pollToken !== "string")
