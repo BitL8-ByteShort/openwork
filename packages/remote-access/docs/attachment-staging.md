@@ -73,3 +73,28 @@ large metadata, malformed JSON/UTF-8 and bounded fallback. Mac and actual NUC
 passed 115 tests/22 files, typecheck and build with identical production source.
 Read-only native history checks on both hosts returned PNG/PDF labels in 1,853
 bytes. Accepted upload/prompt evidence was reused; no new inference was needed.
+
+## Qualified client and capability continuation
+
+The independently maintained iOS candidate now implements protected drafts,
+photo conversion, native picker entry points and upload/recovery controls.
+One native Simulator prompt containing a photo and PDF passed through paired
+HTTPS on each actual host; selected-file input was injected into production
+importers. The model read both contents, temporary credentials and mappings
+were cleaned up, and existing host state/pairing was preserved. This is not
+physical picker or cellular acceptance.
+
+Desktop embedding explicitly qualifies attachment availability after compatible
+health. External adapters default to unavailable; read-only and incompatible
+adapters cannot advertise it. A later incompatible health check withdraws it.
+The existing registry feature `remoteAccess` remains off by default on cloud and
+self-hosted deployments; its kill switch closes the bridge and drains scoped
+work. This qualified subset does not create a second rollout or environment
+flag. The separate host-owned `fileTransfer` grant remains default-off and is
+checked on every scoped transfer. No existing phone grant is expanded.
+
+Five advertisement regressions pass; both actual hosts passed 120 package
+tests/23 files, typecheck and build with identical production sources. Physical
+selection/recovery and the next signed TestFlight candidate remain release
+gates. Client behavior and data handling are recorded in the iOS repository's
+`docs/ATTACHMENTS.md`.

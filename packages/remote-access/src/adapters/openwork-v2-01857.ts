@@ -77,6 +77,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     // installations keep the independently qualified stable-version boundary.
     private bundledServerVersion?: string,
     private qualifiedQuestions = false,
+    private qualifiedAttachments = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -208,6 +209,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       modelSettings: supported && this.qualifiedWrites,
       savedPermissions: supported && this.qualifiedWrites,
       questions: supported && this.qualifiedWrites && this.qualifiedQuestions,
+      attachments: supported && this.qualifiedWrites && this.qualifiedAttachments,
     };
   }
   async listWorkspaces() {
