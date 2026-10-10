@@ -14,6 +14,7 @@ import type {
   QuestionAnswers,
 } from "../contract/index.js";
 import type { ArtifactContext } from '../artifacts/catalog.js';
+import type { GroupSnapshot, GroupCommand } from './session-groups.js';
 import type { ChangeContext } from '../changes/catalog.js';
 export interface StagedAttachment { id: string; path: string; name: string; mime: string; bytes: number; sha256: string }
 export interface NativePromptFile { id: string; uri: string; name: string; mime: string; bytes: number; sha256: string }
@@ -60,6 +61,8 @@ export interface OpenWorkAdapter {
   sendAttachments?(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal): Promise<void>;
   readArtifactContext?(wid: string, sid: string, signal: AbortSignal): Promise<ArtifactContext>;
   readChangeContext?(wid: string, sid: string, signal: AbortSignal): Promise<ChangeContext>;
+  readSessionGroups?(wid:string,signal:AbortSignal):Promise<GroupSnapshot>;
+  changeSessionGroup?(wid:string,command:GroupCommand,revision:string,signal:AbortSignal):Promise<string|null>;
   create(wid: string): Promise<string>;
   rename(
     wid: string,

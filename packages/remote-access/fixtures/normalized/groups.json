@@ -1,0 +1,15 @@
+{
+  "type": "GroupSnapshot",
+  "value": {
+    "revision": "829c10fd41b5499bcfb2e22a1de39874afdb11439f25c6ee26a8a2c0a01f911e",
+    "groups": [
+      {
+        "id": "grp_test",
+        "label": "Reviewed group"
+      }
+    ],
+    "assignments": {
+      "ses_test": "grp_test"
+    }
+  }
+}
