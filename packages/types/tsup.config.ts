@@ -3,6 +3,7 @@ import { defineConfig } from "tsup"
 export default defineConfig({
   entry: {
     index: "src/index.ts",
+    "google-drive-upload": "src/google-drive-upload.ts",
     "cloud-model-fast": "src/cloud-model-fast.ts",
     "agent-context-diagnostics": "src/agent-context-diagnostics.ts",
     "openwork-affordance": "src/openwork-affordance.ts",
@@ -16,6 +17,7 @@ export default defineConfig({
     "connection-action-app": "src/connection-action-app.ts",
     "den/desktop-app-restrictions": "src/den/desktop-app-restrictions.ts",
     "den/desktop-policies": "src/den/desktop-policies.ts",
+    "den/permissions": "src/den/permissions.ts",
     "den/connect-diagnostics": "src/den/connect-diagnostics.ts",
     "den/egress-diagnostics": "src/den/egress-diagnostics.ts",
     "den/gateway": "src/den/gateway.ts",

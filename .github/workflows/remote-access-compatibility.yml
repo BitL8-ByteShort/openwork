@@ -1,0 +1,47 @@
+name: Remote access compatibility
+
+on:
+  pull_request:
+    paths:
+      - packages/remote-access/**
+      - packages/features/**
+      - apps/desktop/electron/remote-access*.mjs
+      - apps/desktop/tests/remote-access*.test.mjs
+      - pnpm-lock.yaml
+      - .github/workflows/remote-access-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-access-compatibility-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host:
+    name: Remote access (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.4.0
+      - name: Install scoped bridge dependencies
+        run: pnpm install --frozen-lockfile --filter @openwork/remote-access...
+      - name: Check bridge and desktop lifecycle
+        run: |
+          pnpm --filter @openwork/remote-access typecheck
+          pnpm --filter @openwork/remote-access build
+          pnpm --filter @openwork/remote-access test
+          node --test apps/desktop/tests/remote-access*.test.mjs

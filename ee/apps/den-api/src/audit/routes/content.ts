@@ -13,7 +13,7 @@ function route(
   return { method, path, class: auditClass, action, kind, resource: { type, idParam }, attribution, ...extra }
 }
 
-/** orgMemberRoute / orgRoleRoute: organizationContext supplies the member actor. */
+/** orgMemberRoute / orgRoleRoute / orgPermissionRoute: organizationContext supplies the member actor. */
 function member(
   method: AuditRouteMethod, path: string, auditClass: AuditRouteClass, action: string, kind: string,
   type: string, idParam: string | null, extra: Extra = {},
@@ -55,6 +55,10 @@ export const contentAuditRoutes: readonly AuditRouteDeclaration[] = [
   alias("ALL", "/v1/codemode-scripts", "workflow.alias.proxy", "One-release alias re-dispatched through app.fetch to /v1/workflows; the destination records."),
   alias("ALL", "/v1/codemode-scripts/*", "workflow.alias_subpath.proxy", "One-release alias re-dispatched through app.fetch to /v1/workflows/*; the destination records."),
   alias("ALL", "/v1/programs/*", "program.alias.proxy", "One-release alias re-dispatched through app.fetch to /v1/workflows/*; the destination records."),
+  alias("ALL", "/v1/codemode-runs", "workflow_run.alias.proxy", "Legacy alias re-dispatched through app.fetch to GET /v1/workflow-runs; the destination records."),
+
+  // Workflow run history (Organization Analytics)
+  member("GET", "/v1/workflow-runs", "tenant_read", "workflow_run.list", "workflow.run", "workflow_run", null, { notes: "Owners and admins; run receipts with tool call names, status and error text. No inputs or results." }),
 
   // Automations
   member("GET", "/v1/automations", "tenant_access", "automation.list", "automation.management", "automation", null, { notes: `Returns automation instructions. Read may persist needs_attention_reason (reconcileModelAttention). mcp/agent.ts also lists automations directly as a read-only resource index. ${MCP_NATIVE}` }),
