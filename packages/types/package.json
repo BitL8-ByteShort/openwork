@@ -4,6 +4,17 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./google-drive-upload": {
+      "types": "./src/google-drive-upload.ts",
+      "development": "./src/google-drive-upload.ts",
+      "bun": "./src/google-drive-upload.ts",
+      "default": "./dist/google-drive-upload.js"
+    },
+    "./den/managed-deployments": {
+      "types": "./src/den/managed-deployments.ts",
+      "development": "./src/den/managed-deployments.ts",
+      "default": "./src/den/managed-deployments.ts"
+    },
     "./cloud-model-fast": {
       "types": "./src/cloud-model-fast.ts",
       "development": "./src/cloud-model-fast.ts",
@@ -84,6 +95,11 @@
       "types": "./src/den/desktop-app-restrictions.ts",
       "development": "./src/den/desktop-app-restrictions.ts",
       "default": "./src/den/desktop-app-restrictions.ts"
+    },
+    "./den/permissions": {
+      "types": "./src/den/permissions.ts",
+      "development": "./src/den/permissions.ts",
+      "default": "./src/den/permissions.ts"
     },
     "./den/desktop-policies": {
       "types": "./src/den/desktop-policies.ts",
@@ -186,6 +202,7 @@
     "build": "tsup"
   },
   "dependencies": {
+    "@openwork/managed-deployments": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {
