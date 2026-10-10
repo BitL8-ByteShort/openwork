@@ -62,11 +62,11 @@ test.skipIf(!available)(
       try {
         expect(defaultTeam.data.team.organizationId).toBe(secondOrg.id);
         expect(defaultTeam.data.team.id).not.toBe(selectedTeam.data.team.id);
-        const override = await scoped.getV1Org(undefined, {
+        const override = await scoped.getV1Org({
           headers: { "x-openwork-org-id": secondOrg.id }, throwOnError: true,
         });
         expect(override.data.organization.id).toBe(secondOrg.id);
-        const unchanged = await scoped.getV1Org(undefined, { throwOnError: true });
+        const unchanged = await scoped.getV1Org({ throwOnError: true });
         expect(unchanged.data.organization.id).toBe(org.id);
         evidence.recordAssertionEvidence("Session organization context and request overrides", "With a different default organization, the configured orgId places a team in the selected organization. An unscoped client creates a distinct team in the default organization; a per-request override selects that organization without changing the client default.",
           selectedTeam.data.team.organizationId === org.id && defaultTeam.data.team.organizationId === secondOrg.id
@@ -93,11 +93,11 @@ test.skipIf(!available)(
     await expect(invalid.getV1Me({ throwOnError: true })).rejects.toBeDefined();
     evidence.recordAssertionEvidence("Session and API-key authentication", "Both credentials resolve to the issuing user; an invalid key rejects.",
       keyedIdentity.data.user.id === identity.data.user.id);
-    const workers = await keyed.getV1Workers({ limit: 1 }, { throwOnError: true });
-    expect(workers.response.status).toBe(200);
-    expect(requestedUrls).toContain(`${den.ref.apiUrl}/v1/workers?limit=1`);
+    const runs = await keyed.getV1WorkflowRuns({ limit: 1 }, { throwOnError: true });
+    expect(runs.response.status).toBe(200);
+    expect(requestedUrls).toContain(`${den.ref.apiUrl}/v1/workflow-runs?limit=1`);
     evidence.recordAssertionEvidence("Typed query parameters", "The numeric limit becomes ?limit=1 and Den accepts the request.",
-      workers.response.status === 200 && requestedUrls.includes(`${den.ref.apiUrl}/v1/workers?limit=1`));
+      runs.response.status === 200 && requestedUrls.includes(`${den.ref.apiUrl}/v1/workflow-runs?limit=1`));
 
     const created = await keyed.postV1Teams({ name: "SDK team" }, { throwOnError: true });
     expect(created.data.team.name).toBe("SDK team");

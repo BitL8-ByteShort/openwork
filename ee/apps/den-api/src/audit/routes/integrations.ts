@@ -101,6 +101,8 @@ export const integrationsAuditRoutes: readonly AuditRouteDeclaration[] = [
   external("POST", `${GW}/spreadsheets`, "capability.google_sheets.spreadsheet.create", GWK, res("google_spreadsheet"), GOOGLE, CAP),
   external("PUT", `${GW}/spreadsheets/:spreadsheetId/values`, "capability.google_sheets.values.update", GWK, res("google_spreadsheet", "spreadsheetId"), GOOGLE, CAP),
   external("POST", `${GW}/spreadsheets/:spreadsheetId/values/append`, "capability.google_sheets.values.append", GWK, res("google_spreadsheet", "spreadsheetId"), GOOGLE, CAP),
+  external("POST", `${GW}/drive-upload-sessions`, "capability.google_drive.upload.prepare", GWK, res("google_drive_file"), GOOGLE, `${CAP} Returns a secret resumable upload URL; no file bytes or session URL are captured in audit evidence.`),
+  external("POST", "/v1/direct-uploads/google-workspace/drive-upload-sessions", "capability.google_drive.host_upload.prepare", GWK, res("google_drive_file"), GOOGLE, "cloudTransportRoute; host prepares a selected-account resumable session, bytes bypass Den. Session URL is not audit evidence."),
   external("POST", "/v1/direct-uploads/google-workspace/drive-files", "capability.google_drive.file.upload", GWK, res("google_drive_file"), GOOGLE, "cloudTransportRoute (MCP OAuth token, org from token); host file transport, bytes not echoed. Conditional token refresh write."),
   external("POST", "/v1/direct-uploads/google-workspace/gmail-drafts", "capability.gmail.draft.attachments.create", GWK, res("gmail_draft"), GOOGLE, "cloudTransportRoute (MCP OAuth token, org from token); creates a draft with attachments, never sends. Conditional token refresh write."),
 
@@ -230,6 +232,7 @@ export const integrationsAuditRoutes: readonly AuditRouteDeclaration[] = [
   handlerRoute("tenant_external", "POST", "/v1/inference-providers/oauth/browser-litellm-check", "inference_provider.member_oauth.browser_litellm_check", IPO, res("provider_credential"), { external: LITELLM, notes: "Public route. Attributed like browser-litellm-key once the cookie user matches the entry and the provider/set binding and litellm feature are rechecked; before LiteLLM key creation for that member." }),
 
   // Models analytics
+  route("tenant_signal", "POST", "/v1/inference/analytics/events", "models_analytics.events.report", MA, res("models_analytics_event"), "org_context", { notes: "Desktop task metadata for the caller's own OpenWork Models calls; dropped unless the organization opted in. High volume." }),
   access("GET", "/v1/inference/analytics/activity", "models_analytics.activity.list", MA, res("models_analytics_event"), "Per-member task analytics payloads (tool/skill/model metadata)."),
   read("/v1/inference/analytics/consumption", "models_analytics.consumption.read", MA, res("models_analytics_event"), "Aggregates only."),
   read("/v1/inference/analytics/settings", "models_analytics.settings.read", "models_analytics.configuration", res("models_analytics_settings")),
@@ -237,6 +240,15 @@ export const integrationsAuditRoutes: readonly AuditRouteDeclaration[] = [
   change("POST", "/v1/inference/analytics/langfuse/connect", "models_analytics.export.connect", "models_analytics.configuration", res("models_analytics_export"), "Stores Langfuse credentials (write-only) after a test send to Langfuse; enables the export loop."),
   external("POST", "/v1/inference/analytics/langfuse/test", "models_analytics.export.test", "models_analytics.configuration", res("models_analytics_export"), "Langfuse", "Sends a test event with caller-supplied credentials; no local write."),
   change("DELETE", "/v1/inference/analytics/langfuse", "models_analytics.export.disconnect", "models_analytics.configuration", res("models_analytics_export")),
+
+  // Organization Analytics (desktop adoption telemetry)
+  route("tenant_signal", "POST", "/v1/telemetry/ingest", "telemetry.events.ingest", "telemetry.adoption", res("telemetry_event"), "org_context", { notes: "Desktop activity and session/task lifecycle pings for the calling member; identifiers and timings only. High volume." }),
+  read("/v1/telemetry/dimensions", "telemetry.dimensions.list", "telemetry.adoption", res("telemetry_session_dimension")),
+  read("/v1/telemetry/adoption", "telemetry.adoption.read", "telemetry.adoption", res("telemetry_event"), "Aggregates only."),
+  read("/v1/telemetry/analytics", "telemetry.analytics.read", "telemetry.adoption", res("telemetry_event"), "Aggregates only."),
+
+  // Skill usage (skillUsage feature)
+  read("/v1/skill-usage", "skill_usage.read", "skill_usage.reporting", res("capability_usage_event"), "Aggregates only: per-skill load counts, distinct member counts and last use; no member identities."),
 
   // Legacy LLM providers
   read("/v1/llm-provider-catalog", "llm_provider_catalog.list", LLM, res("llm_provider_catalog")),

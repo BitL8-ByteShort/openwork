@@ -165,6 +165,9 @@ importers:
       '@opencode-ai/sdk':
         specifier: ^1.18.15
         version: 1.18.18
+      '@openwork-ee/telemetry-contracts':
+        specifier: workspace:*
+        version: link:../../ee/packages/telemetry-contracts
       '@openwork/browser-tabs':
         specifier: workspace:*
         version: link:../../packages/browser-tabs
@@ -631,6 +634,9 @@ importers:
       '@openwork/install-config':
         specifier: workspace:*
         version: link:../../../packages/install-config
+      '@openwork/managed-deployments':
+        specifier: workspace:*
+        version: link:../../../packages/managed-deployments
       '@openwork/mcp-apps':
         specifier: workspace:*
         version: link:../../../packages/mcp-apps
@@ -822,6 +828,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: 1.42.0
         version: 1.42.0
+      '@openwork-ee/telemetry-contracts':
+        specifier: workspace:*
+        version: link:../../packages/telemetry-contracts
       '@openwork-ee/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -1630,6 +1639,15 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/managed-deployments:
+    dependencies:
+      fast-xml-parser:
+        specifier: 5.8.0
+        version: 5.8.0
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+
   packages/mcp-apps:
     dependencies:
       '@modelcontextprotocol/ext-apps':
@@ -1666,6 +1684,18 @@ importers:
       vite-plugin-singlefile:
         specifier: ^2.3.0
         version: 2.3.3(rollup@4.62.2)(vite@6.4.3(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/opencode-plugin:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.7
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(jiti@2.7.0)(postcss@8.5.23)(tsx@4.23.1)(typescript@5.9.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
 
   packages/openwork-bootstrap: {}
 
@@ -1816,6 +1846,9 @@ importers:
 
   packages/types:
     dependencies:
+      '@openwork/managed-deployments':
+        specifier: workspace:*
+        version: link:../managed-deployments
       zod:
         specifier: ^4.3.6
         version: 4.3.6
