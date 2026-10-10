@@ -74,7 +74,7 @@ jobs:
     name: Unit tests
     needs: classify-changes
     if: needs.classify-changes.outputs.lane == 'full'
-    runs-on: blacksmith-16vcpu-ubuntu-2204
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-16vcpu-ubuntu-2204' || 'ubuntu-22.04' }}
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -139,7 +139,7 @@ jobs:
     name: Build and boot the desktop app
     needs: classify-changes
     if: needs.classify-changes.outputs.lane == 'full'
-    runs-on: blacksmith-16vcpu-ubuntu-2204
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-16vcpu-ubuntu-2204' || 'ubuntu-22.04' }}
     timeout-minutes: 15
     steps:
       # Bootstrap before checkout or any action can execute repository code.
@@ -287,7 +287,7 @@ jobs:
   # here without blocking unrelated PRs. No retries or ignored failures.
   openwork-tests-extended:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ github.repository == 'different-ai/openwork' && matrix.os || (matrix.os == 'blacksmith-12vcpu-macos-15' && 'macos-15' || 'ubuntu-22.04') }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -338,7 +338,7 @@ jobs:
   packaged-desktop-macos:
     name: Packaged desktop on macOS
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: blacksmith-12vcpu-macos-15
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-12vcpu-macos-15' || 'macos-15' }}
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -382,11 +382,12 @@ jobs:
   # enterprise package opens that same profile, and opens it again after a
   # restart (released-enterprise-activated, #4848). Scheduled only; it needs a
   # local Den and a downloaded release.
+  # This fork has no enterprise release artifacts to use as an upgrade baseline.
   packaged-upgrade-path:
     name: Open the latest release's enterprise profile in this build
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'different-ai/openwork' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     # Same runner as PR proof's packaged lane, which already runs packaged-smoke here.
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 40
     steps:
       - name: Checkout
