@@ -85,6 +85,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     private qualifiedChanges = false,
     private qualifiedSessionGroups = false,
     private qualifiedSessionActions = false,
+    private qualifiedSessionSearch = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -222,6 +223,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       sessionGroups: supported && this.qualifiedWrites && this.qualifiedSessionGroups,
       forkSession: supported && this.qualifiedWrites && this.qualifiedSessionActions,
       deleteSession: supported && this.qualifiedWrites && this.qualifiedSessionActions,
+      searchSessions: supported && this.qualifiedSessionSearch,
     };
   }
   async listWorkspaces() {
@@ -247,12 +249,13 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       status: "unknown",
     });
   }
-  async listSessions(wid: string, cursor?: string) {
+  async listSessions(wid: string, cursor?: string, signal?: AbortSignal) {
     const q = new URLSearchParams({
       limit: "50",
       ...(cursor ? { cursor } : {}),
     });
-    const j = obj(await this.request(this.base(wid) + "/session?" + q));
+    signal?.throwIfAborted();
+    const j = obj(await this.request(this.base(wid) + "/session?" + q,'GET',undefined,signal));
     const data = list(j.data).map((v) => this.session(v, wid));
     if (data.length > 50) throw new BridgeError("INVALID_UPSTREAM", 502);
     return {

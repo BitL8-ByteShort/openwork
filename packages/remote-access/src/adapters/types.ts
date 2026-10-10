@@ -26,7 +26,7 @@ export interface OpenWorkAdapter {
   capabilities: Capabilities;
   health(): Promise<void>;
   listWorkspaces(): Promise<Workspace[]>;
-  listSessions(wid: string, cursor?: string): Promise<Page<Session[]>>;
+  listSessions(wid: string, cursor?: string, signal?: AbortSignal): Promise<Page<Session[]>>;
   readSession(wid: string, sid: string): Promise<Session>;
   readMessages(
     wid: string,

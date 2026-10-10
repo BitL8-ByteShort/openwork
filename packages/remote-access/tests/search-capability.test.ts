@@ -1,0 +1,5 @@
+import {test,expect} from 'vitest';import {createServer} from 'node:http';import {OpenWorkV2} from '../src/adapters/openwork-v2-01857.js';
+test.each([{qualified:false,writes:true,version:'0.18.57',expected:false},{qualified:true,writes:true,version:'0.18.57',expected:true},{qualified:true,writes:false,version:'0.18.57',expected:true},{qualified:true,writes:true,version:'other',expected:false}])('title search is a separately qualified read capability: %j',async f=>{
+ const server=createServer((_req,res)=>{res.setHeader('content-type','application/json');res.end(JSON.stringify({ok:true,version:f.version}))});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+ try{const a=server.address();if(!a||typeof a==='string')throw Error('Port');const adapter=new OpenWorkV2(async()=>({origin:`http://127.0.0.1:${a.port}`,token:'synthetic'}),f.writes,undefined,false,false,false,false,false,false,f.qualified);await adapter.health();expect(adapter.capabilities.searchSessions===true).toBe(f.expected)}finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()))}
+});
