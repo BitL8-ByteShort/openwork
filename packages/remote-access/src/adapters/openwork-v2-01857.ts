@@ -1,5 +1,6 @@
 import {NativeSessionGroups,type GroupCommand} from './session-groups.js';
 import {NativeSessionActions} from './session-actions.js';
+import {NativeWorkspaceDefaults} from "./workspace-defaults.js";
 import { UpstreamControls } from "./controls.js";
 import { normalizeQuestion, validateQuestionAnswers } from "./questions.js";
 import { NativeAttachments, InboxMultipart } from "./attachments.js";
@@ -86,6 +87,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     private qualifiedSessionGroups = false,
     private qualifiedSessionActions = false,
     private qualifiedSessionSearch = false,
+    private qualifiedWorkspaceDefaults = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -224,6 +226,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       forkSession: supported && this.qualifiedWrites && this.qualifiedSessionActions,
       deleteSession: supported && this.qualifiedWrites && this.qualifiedSessionActions,
       searchSessions: supported && this.qualifiedSessionSearch,
+      workspaceDefaults: supported && this.qualifiedWrites && this.qualifiedWorkspaceDefaults,
     };
   }
   async listWorkspaces() {
@@ -640,6 +643,27 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       "POST",
       { reply: decision === "allowOnce" ? "once" : "reject" },
     );
+  }
+  private workspaceDefaults(check:()=>void) {
+    const read=async(wid:string,signal:AbortSignal)=>{check();const result=await this.request(`/workspace/${safeId(wid)}/default-model`,'GET',undefined,signal);check();return result;};
+    const catalog=async(wid:string,signal:AbortSignal)=>{check();const result=await this.request(this.base(wid)+'/model','GET',undefined,signal);check();return result;};
+    return new NativeWorkspaceDefaults(read,catalog,async(wid,body,signal)=>{
+      check();const r=await this.response(`/workspace/${safeId(wid)}/default-model`,'PUT',body,AbortSignal.any([signal,AbortSignal.timeout(30000)]));
+      const reader=r.body?.getReader();let bytes=0;const chunks:Buffer[]=[];
+      try { if(reader)for(;;){const x=await reader.read();if(x.done)break;bytes+=x.value.byteLength;if(bytes>65536)throw new BridgeError('INVALID_UPSTREAM',502);chunks.push(Buffer.from(x.value));} }
+      catch(e){await reader?.cancel().catch(()=>{});throw e;}
+      let value:unknown;try{value=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new BridgeError('INVALID_UPSTREAM',502);}
+      // Only this native code guarantees that the conditional write did not happen.
+      if(r.status===409&&record(value)&&value.code==='workspace_default_model_changed')throw new PreflightError('STALE_SETTINGS',409);
+      if(!r.ok)throw new BridgeError('UPSTREAM_REJECTED',502);
+      check();return value;
+    });
+  }
+  async readWorkspaceDefaults(wid:string,signal:AbortSignal,check=()=>{}) {
+    this.enabled('workspaceDefaults');return this.workspaceDefaults(check).read(wid,signal);
+  }
+  async setWorkspaceDefaults(wid:string,selection:ModelSelection,revision:string,signal:AbortSignal,check=()=>{}) {
+    this.enabled('workspaceDefaults');return this.workspaceDefaults(check).set(wid,selection,revision,signal);
   }
   private controls(wid: string) {
     return new UpstreamControls(

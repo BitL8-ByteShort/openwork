@@ -1,3 +1,4 @@
+import {registerWorkspaceDefaultsRoutes} from "./routes/workspace-defaults.js";
 import {registerSessionGroupRoutes} from './routes/session-groups.js';
 import {registerSessionActionRoutes} from './routes/session-actions.js';
 import {registerSessionSearchRoutes} from './routes/session-search.js';
@@ -198,6 +199,7 @@ export function createServers(o: Options) {
   registerSessionGroupRoutes({remote,adapter:o.adapter,operations:featureOperations,ledger,device,envelope});
   registerSessionActionRoutes({remote,adapter:o.adapter,operations:featureOperations,ledger,device,envelope});
   registerSessionSearchRoutes({remote,adapter:o.adapter,operations:featureOperations,device,envelope});
+  registerWorkspaceDefaultsRoutes({remote,adapter:o.adapter,operations:featureOperations,ledger,device,envelope});
   remote.post("/v1/pairings/poll", async (req) => {
     const b = body(req.body, ["claimId", "pollToken"]);
     if (typeof b.claimId !== "string" || typeof b.pollToken !== "string")

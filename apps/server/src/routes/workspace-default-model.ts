@@ -39,6 +39,6 @@ export function registerWorkspaceDefaultModelRoutes(options: RegisterWorkspaceDe
         issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
       });
     }
-    return jsonResponse(await writeWorkspaceDefaultModel(config, workspace.id, parsed.data.model));
+    return jsonResponse(await writeWorkspaceDefaultModel(config, workspace.id, parsed.data.model, parsed.data.revision));
   });
 }

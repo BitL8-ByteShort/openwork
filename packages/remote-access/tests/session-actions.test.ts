@@ -50,3 +50,9 @@ test('action IDs, scopes and cancellation never become arbitrary native routes',
  const f=fixture(),c=new AbortController();c.abort();await expect(f.adapter.read('owned','ses_parent',c.signal)).rejects.toBeDefined();
  await expect(f.adapter.read('../foreign','ses_parent',signal())).rejects.toBeDefined();expect(f.calls).toHaveLength(0);
 });
+test('a newly created untitled chat can be removed before its first message',async()=>{
+ for(const title of [undefined,null,'']){const f=fixture(),raw=f.sessions.get('ses_parent')! as unknown as Record<string,unknown>;if(title===undefined)delete raw.title;else raw.title=title;const p=await f.adapter.read('owned','ses_parent',signal());expect(p.title).toBe('Untitled chat');expect(await f.adapter.remove('owned','ses_parent',p.revision,signal())).toBe('ses_parent');expect(f.writes()).toHaveLength(1)}
+});
+test('a malformed non-text native title cannot authorize deletion',async()=>{
+ const f=fixture();(f.sessions.get('ses_parent')! as unknown as Record<string,unknown>).title=13;await expect(f.adapter.read('owned','ses_parent',signal())).rejects.toMatchObject({code:'INVALID_UPSTREAM'});expect(f.writes()).toHaveLength(0);
+});
