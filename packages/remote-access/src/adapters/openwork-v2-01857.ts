@@ -2,6 +2,7 @@ import { UpstreamControls } from "./controls.js";
 import { normalizeQuestion, validateQuestionAnswers } from "./questions.js";
 import { NativeAttachments, InboxMultipart } from "./attachments.js";
 import { projectMessageJSON } from "../messages/projection.js";
+import { artifactCandidates } from '../artifacts/candidates.js';
 import { createHash } from "node:crypto";
 import {
   BridgeError,
@@ -78,6 +79,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     private bundledServerVersion?: string,
     private qualifiedQuestions = false,
     private qualifiedAttachments = false,
+    private qualifiedArtifacts = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -210,6 +212,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       savedPermissions: supported && this.qualifiedWrites,
       questions: supported && this.qualifiedWrites && this.qualifiedQuestions,
       attachments: supported && this.qualifiedWrites && this.qualifiedAttachments,
+      artifacts: supported && this.qualifiedArtifacts,
     };
   }
   async listWorkspaces() {
@@ -255,6 +258,41 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     const s = this.session(j.data, wid);
     if (s.id !== sid) throw new BridgeError("NOT_FOUND", 404);
     return s;
+  }
+  async readArtifactContext(wid: string, sid: string, signal: AbortSignal) {
+    this.enabled('artifacts');
+    const registry = obj(await this.request('/workspaces', 'GET', undefined, signal));
+    const workspace = list(registry.items).find(w => record(w) && w.id === wid);
+    if (!record(workspace) || typeof workspace.path !== 'string') throw new BridgeError('NOT_FOUND', 404);
+    // This native proxy enforces persistent workspace home before returning the
+    // mutable execution directory. Do not substitute a workspace-wide file API.
+    const session = obj(obj(await this.request(this.base(wid) + '/session/' + safeId(sid), 'GET', undefined, signal)).data);
+    if (session.id !== sid) throw new BridgeError('NOT_FOUND', 404);
+    if (!record(session.location) || typeof session.location.directory !== 'string') throw new BridgeError('INVALID_UPSTREAM', 502);
+    const messages: unknown[] = [], seen = new Set<string>(); let cursor: string | undefined, moreOnComputer = false, limit = 50;
+    for (let n = 0; n < 4; n++) {
+      const q = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
+      const response = await this.response(this.base(wid) + '/session/' + safeId(sid) + '/message?' + q, 'GET', undefined,
+        AbortSignal.any([signal, AbortSignal.timeout(15000)]));
+      if (!response.ok) { await response.body?.cancel(); throw new BridgeError(response.status === 404 ? 'NOT_FOUND' : 'UPSTREAM_REJECTED', response.status === 404 ? 404 : 502); }
+      let page: Record<string, unknown>;
+      try { page = obj(await projectMessageJSON(response)); }
+      catch (error) {
+        if (limit === 50 && error instanceof BridgeError && error.code === 'SNAPSHOT_TOO_LARGE') { limit = 1; moreOnComputer = true; continue; }
+        throw error;
+      }
+      const rows = list(page.data); if (rows.length > limit) throw new BridgeError('INVALID_UPSTREAM', 502);
+      messages.push(...rows);
+      const next = nextCursor(page.cursor);
+      if (!next) { cursor = undefined; break; }
+      cursor = next;
+      if (seen.has(next) || messages.length >= 100) { moreOnComputer = true; break; }
+      seen.add(next);
+    }
+    const candidates = artifactCandidates(messages);
+    signal.throwIfAborted();
+    return { workspaceDirectory: workspace.path, executionDirectory: session.location.directory, candidates: candidates.items,
+      moreOnComputer: moreOnComputer || candidates.moreOnComputer || cursor !== undefined };
   }
   async rename(wid: string, sid: string, title: string, previousTitle: string) {
     if (!this.capabilities.renameSession)

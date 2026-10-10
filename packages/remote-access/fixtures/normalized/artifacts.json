@@ -1,0 +1,18 @@
+{
+  "type": "ArtifactCatalog",
+  "value": {
+    "items": [
+      {
+        "id": "art_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sessionId": "ses_test",
+        "name": "report.txt",
+        "mime": "text/plain",
+        "bytes": 17,
+        "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "previewKind": "text"
+      }
+    ],
+    "moreOnComputer": false
+  }
+}

@@ -29,6 +29,10 @@ No separate Node installation, shell command or browser admin page is required b
 
 See [protocol](docs/protocol.md) and [qualification](docs/qualification.md). This is a desktop preview, not a claim of Windows, headless, every Linux distribution or App Store support.
 
+The generated-file source candidate adds a scoped catalog and bounded binary
+downloads. See [artifacts](docs/artifacts.md) for supported formats, containment,
+grants, qualification and remaining physical/worktree acceptance.
+
 ## State and handover
 
 macOS uses `~/Library/Application Support/OpenWorkRemote`; Linux uses `$XDG_STATE_HOME/openwork-remote`, falling back to `~/.local/state/openwork-remote`. Directories must be owned by the current user and mode `0700`; files are `0600`. Symlinks and unsafe modes are rejected. A process lock prevents the standalone and embedded bridges from sharing a writable store.
