@@ -15,6 +15,8 @@ import { scimGroupMappingUpdatedEvent } from "./audit/domain/scim.js"
 import type { AuditChangeCapture } from "./audit/request-capture.js"
 import { db } from "./db.js"
 import { withOrganizationTeamMutation, withOrganizationMembershipUsageMutation, type TeamMutationTransaction } from "./organization-team-roles.js"
+import { archiveTeamPermissionSets } from "./permissions/team-set-archive.js"
+import { requireHeldInTransaction } from "./permissions/in-transaction.js"
 
 export const SCIM_GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group"
 export const SCIM_LIST_RESPONSE_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
@@ -551,6 +553,7 @@ export async function deleteScimGroup(input: {
     if (group.teamId && normalizeMappingMode(provider.groupMappingMode) === "create_teams") {
       await tx.update(TeamTable).set({ grantsOrganizationAdmin: false })
         .where(and(eq(TeamTable.id, group.teamId), eq(TeamTable.organizationId, input.provider.organizationId)))
+      await archiveTeamPermissionSets(tx, { organizationId: input.provider.organizationId, teamIds: [group.teamId], actorMemberId: null, at: new Date() })
     }
     const members = await tx.select().from(ScimGroupMemberTable).where(eq(ScimGroupMemberTable.groupId, group.id))
     const teamMemberIds = members.flatMap((member) => provider.groupMappingMode === "create_teams" && member.teamMemberId ? [member.teamMemberId] : [])
@@ -593,8 +596,11 @@ export async function serializeScimGroup(group: ScimGroup, baseUrl: string): Pro
 export async function setScimGroupMappingMode(input: {
   provider: ScimProvider
   mode: ScimGroupMappingMode
+  /** The member changing it; scim.manage is re-checked inside the transaction (throws PermissionRevokedError). */
+  actorMemberId?: typeof MemberTable.$inferSelect.id
 }, capture: AuditChangeCapture | null = null): Promise<string[]> {
   return withOrganizationMembershipUsageMutation(input.provider.organizationId, async (tx) => {
+    if (input.actorMemberId) await requireHeldInTransaction(tx, { organizationId: input.provider.organizationId, memberId: input.actorMemberId, key: "scim.manage" })
     const provider = await loadScimProvider(tx, input.provider)
     if (!provider) return []
     if (provider.groupMappingMode !== input.mode) {
@@ -604,6 +610,9 @@ export async function setScimGroupMappingMode(input: {
       if (teamIds.length > 0) {
         await tx.update(TeamTable).set({ grantsOrganizationAdmin: false })
           .where(and(eq(TeamTable.organizationId, input.provider.organizationId), inArray(TeamTable.id, teamIds)))
+        // Like the Admin designation, the teams' permission sets stop applying: memberships retained
+        // from the old mapping (or re-projected by the new one) gain nothing until the owner sets them again.
+        await archiveTeamPermissionSets(tx, { organizationId: input.provider.organizationId, teamIds, actorMemberId: null, at: new Date() })
         if (input.mode === "create_teams") {
           // Re-enabling mapping hands membership back to the IdP, not to the
           // manual edits made while the retained team was disconnected.

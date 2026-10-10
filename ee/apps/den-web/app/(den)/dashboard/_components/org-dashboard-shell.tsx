@@ -16,6 +16,7 @@ import { useDenFlow } from "../../_providers/den-flow-provider";
 import { DEFAULT_AUTH_NAME } from "../../_lib/den-flow";
 import {
   getAiGatewayRoute,
+  getAnalyticsRoute,
   getAutomationsRoute,
   getApiKeysRoute,
   getAuditLogsRoute,
@@ -23,8 +24,10 @@ import {
   getBillingRoute,
   getCustomLlmProvidersRoute,
   getDiagnosticsRoute,
+  getDeploymentsRoute,
   getDesktopPoliciesRoute,
   getOrgAccessFlags,
+  orgFeatureEnabled,
   getIntegrationsRoute,
   getLibraryRoute,
   getMcpConnectionsRoute,
@@ -39,7 +42,9 @@ import {
   getPluginsRoute,
   getSsoRoute,
   getScimRoute,
+  getWorkflowRunsRoute,
   getWebRoute,
+  getPermissionsRoute,
 } from "../../_lib/den-org";
 import { useOrgListWindow } from "../../_lib/use-org-list-window";
 import { useOrgDashboard } from "../_providers/org-dashboard-provider";
@@ -229,8 +234,14 @@ function getDashboardPageTitle(pathname: string, orgSlug: string | null) {
   if (pathname.startsWith(getAuditLogsRoute(orgSlug))) {
     return "Audit logs";
   }
+  if (pathname.startsWith(getAnalyticsRoute(orgSlug))) {
+    return "Analytics";
+  }
   if (pathname.startsWith(getMembersRoute(orgSlug))) {
     return "Members";
+  }
+  if (pathname.startsWith(getPermissionsRoute(orgSlug))) {
+    return "Permissions";
   }
   if (pathname.startsWith(getApiKeysRoute(orgSlug))) {
     return "API Keys";
@@ -259,6 +270,9 @@ function getDashboardPageTitle(pathname: string, orgSlug: string | null) {
   ) {
     return "Advanced";
   }
+  if (pathname.startsWith(getDeploymentsRoute(orgSlug))) {
+    return "Deployments";
+  }
   if (pathname.startsWith(getDiagnosticsRoute(orgSlug))) {
     return "Diagnostics";
   }
@@ -279,6 +293,9 @@ function getDashboardPageTitle(pathname: string, orgSlug: string | null) {
   }
   if (pathname.startsWith(getYourConnectionsRoute(orgSlug))) {
     return "Your Connections";
+  }
+  if (pathname.startsWith(getWorkflowRunsRoute(orgSlug))) {
+    return "Workflow Runs";
   }
   if (pathname.startsWith(getToolTesterRoute(orgSlug))) {
     return "Tool Tester";
@@ -417,7 +434,7 @@ export function OrgDashboardShell({ children }: { children: React.ReactNode }) {
   const access = getOrgAccessFlags(
     orgContext?.currentMember.role ?? "member",
     orgContext?.currentMember.isOwner ?? false,
-    orgContext?.roles,
+    orgContext?.currentMember.permissions,
   );
 
   const pageTitle = getDashboardPageTitle(pathname, activeOrg?.slug ?? null);
@@ -446,6 +463,8 @@ export function OrgDashboardShell({ children }: { children: React.ReactNode }) {
     },
     orgMode: runtimeConfig.orgMode,
     runtimeConfigLoaded,
+    permissionsEnabled: orgFeatureEnabled(orgContext, "permissions"),
+    managedDeployments: orgFeatureEnabled(orgContext, "managedDeployments"),
   });
 
   const orgSwitcher = isSingleOrgMode ? (

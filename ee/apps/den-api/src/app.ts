@@ -45,6 +45,7 @@ import { resolveMcpMemberIdentity } from "./mcp/external-capabilities.js"
 import { DEN_MCP_REQUESTED_SCOPES } from "./mcp/scopes.js"
 import { registerMeRoutes } from "./routes/me/index.js"
 import { registerOrgRoutes } from "./routes/org/index.js"
+import { registerTelemetryRoutes } from "./routes/telemetry/index.js"
 import { registerVersionRoutes } from "./routes/version/index.js"
 import { registerFeatureRoutes } from "./routes/features/index.js"
 import { registerWebhookRoutes } from "./routes/webhooks/index.js"
@@ -295,6 +296,7 @@ registerMcpRoutes(app)
 registerAgentMcpRoutes(app)
 registerExternalConnectionProxyRoutes(app)
 registerAdminMcpRoutes(app)
+registerTelemetryRoutes(app)
 
 configureCloudAgentExecutor({ execute: executeCloudAgent, runtimeAvailable: cloudAgentRuntimeAvailable })
 configureHeadlessAgentExecutor((input) => executeHeadlessAgent(input))
@@ -403,8 +405,8 @@ const openApiOptions: Parameters<typeof generateSpecs>[1] = {
       { name: "Organizations", description: "Organization creation, context, brand assets, and install links." },
       { name: "Invitations", description: "Invitation preview, acceptance, creation, and cancellation routes." },
       { name: "Members", description: "Organization member management routes." },
-      { name: "Roles", description: "Organization custom role management routes." },
       { name: "Teams", description: "Organization team management routes." },
+      { name: "Permissions", description: "Organization permissions: the permission catalog, Member, Admin and team permission sets, their history, and each member's effective permissions." },
       { name: "API Keys", description: "Organization API key management routes." },
       { name: "Desktop Policies", description: "Desktop app policies applied to the organization, members, or teams." },
       { name: "LLM Providers", description: "Organization LLM provider catalog, configuration, and access routes." },
@@ -414,6 +416,7 @@ const openApiOptions: Parameters<typeof generateSpecs>[1] = {
       { name: "Cloud", description: "Organization Cloud instance lifecycle and browser gateway resolution." },
       { name: "Workers", description: "List and delete the organization's workers, including OpenWork Web instances." },
       { name: "Worker Activity", description: "Worker heartbeat and activity reporting routes." },
+      { name: "Managed deployments", description: "OpenWork installations in an organization's own cloud account: launch approval, installer milestones and health reports." },
       { name: "Automations", description: "Scheduled Automations, their runs, and desktop runner presence." },
       { name: "Workbot", description: "The signed-in member's single Workbot conversation." },
       { name: "Workflows", description: "Saved Workflows (Code Mode scripts), their versions, snapshots, and views." },
@@ -430,6 +433,7 @@ const openApiOptions: Parameters<typeof generateSpecs>[1] = {
       { name: "Connectors", description: "Connector accounts and instances (GitHub and other sources) and their sync state." },
       { name: "GitHub", description: "GitHub App installation, repository discovery, and plugin import from GitHub." },
       { name: "Diagnostics", description: "Controlled egress diagnostics for self-hosted deployments." },
+      { name: "Telemetry", description: "Telemetry event ingestion and adoption analytics." },
       { name: "Webhooks", description: "Signed inbound webhooks from third-party providers." },
       { name: "Admin", description: "Platform administration routes for allowlisted OpenWork administrators." },
       { name: "Deprecated", description: "Removed features that answer with 410 or an empty result for old clients." },
