@@ -7,6 +7,7 @@ import {
 } from "@openwork/features/resolve";
 import { BridgeError } from "./contract/index.js";
 import { Store } from "./storage/store.js";
+import { normalizeFeatureGrants } from "./auth/feature-access.js";
 
 /** Development-only operator policy. Packaged desktop uses Den's resolved map. */
 export function localRemoteAccessPolicy(
@@ -34,6 +35,7 @@ export async function readSavedDevices(root: string) {
         workspaceIds: d.workspaceIds,
         allWorkspaces: d.allWorkspaces ?? false,
         active: d.active,
+        features: normalizeFeatureGrants(d.features),
       })) ?? []
   );
 }

@@ -3,6 +3,8 @@ import {
   BridgeError,
   PreflightError,
   type MutationReceipt,
+  type MutationResource,
+  assertContract,
 } from "../contract/index.js";
 import { Store } from "../storage/store.js";
 function canonical(v: unknown): string {
@@ -28,7 +30,7 @@ export class Ledger {
     requestId: string,
     route: string,
     body: unknown,
-    forward: () => Promise<string | null>,
+    forward: () => Promise<MutationResource>,
   ): Promise<MutationReceipt> {
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
@@ -74,13 +76,16 @@ export class Ledger {
     if (!claim.fresh) return claim.receipt;
     let receipt: MutationReceipt;
     try {
-      const resourceId = await forward();
+      const resource = await forward();
+      const resourceId=typeof resource==='string'||resource===null?resource:resource.resourceId;
       receipt = {
         requestId,
         resourceId,
+        ...(typeof resource==='object'&&resource!==null?{resourceRevision:resource.resourceRevision}:{}),
         state: "accepted",
         observedAt: new Date(this.now()).toISOString(),
       };
+      assertContract("MutationReceipt",receipt);
     } catch (error) {
       if (error instanceof PreflightError) {
         await this.store.update((s) => {

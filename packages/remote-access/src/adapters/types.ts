@@ -3,6 +3,7 @@ import type {
   ModelSelection,
   ModelSettings,
   WorkspaceDefaults,
+  SkillCatalog,SkillDetail,SkillSave,SkillWriteResult,
   SavedPermissions,
   Workspace,
   Session,
@@ -20,7 +21,7 @@ import type { SessionActionPreview } from './session-actions.js';
 import type { ChangeContext } from '../changes/catalog.js';
 export interface StagedAttachment { id: string; path: string; name: string; mime: string; bytes: number; sha256: string }
 export interface NativePromptFile { id: string; uri: string; name: string; mime: string; bytes: number; sha256: string }
-export interface AttachmentPrompt { text: string; messageId: string; files: NativePromptFile[] }
+export interface AttachmentPrompt { text: string; messageId: string; files: NativePromptFile[];selectedSkillIds?:string[] }
 export interface OpenWorkAdapter {
   version: string;
   readonly compatibility: Host["compatibility"];
@@ -60,7 +61,7 @@ export interface OpenWorkAdapter {
     file: StagedAttachment,
     signal: AbortSignal,
   ): Promise<{ uri: string }>;
-  sendAttachments?(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal): Promise<void>;
+  sendAttachments?(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal, check?:()=>void): Promise<void>;
   readArtifactContext?(wid: string, sid: string, signal: AbortSignal): Promise<ArtifactContext>;
   readChangeContext?(wid: string, sid: string, signal: AbortSignal): Promise<ChangeContext>;
   readSessionGroups?(wid:string,signal:AbortSignal):Promise<GroupSnapshot>;
@@ -70,6 +71,11 @@ export interface OpenWorkAdapter {
   deleteSession?(wid:string,sid:string,revision:string,signal:AbortSignal):Promise<string>;
   readWorkspaceDefaults?(wid:string,signal:AbortSignal,check?:()=>void):Promise<WorkspaceDefaults>;
   setWorkspaceDefaults?(wid:string,selection:ModelSelection,revision:string,signal:AbortSignal,check?:()=>void):Promise<string>;
+  readSkills?(wid:string,signal:AbortSignal,check?:()=>void):Promise<SkillCatalog>;
+  readSkill?(wid:string,id:string,signal:AbortSignal,check?:()=>void):Promise<SkillDetail>;
+  saveSkill?(wid:string,input:SkillSave,signal:AbortSignal,check?:()=>void):Promise<SkillWriteResult>;
+  deleteSkill?(wid:string,id:string,revision:string,signal:AbortSignal,check?:()=>void):Promise<string>;
+  sendSkills?(wid:string,sid:string,text:string,ids:string[],signal:AbortSignal,check?:()=>void):Promise<void>;
   create(wid: string): Promise<string>;
   rename(
     wid: string,

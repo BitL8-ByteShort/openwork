@@ -1,3 +1,4 @@
+import {NativeSkills} from "./skills.js";
 import {NativeSessionGroups,type GroupCommand} from './session-groups.js';
 import {NativeSessionActions} from './session-actions.js';
 import {NativeWorkspaceDefaults} from "./workspace-defaults.js";
@@ -20,6 +21,7 @@ import {
   type Message,
   type Approval,
   type QuestionAnswers,
+  type SkillSave,
 } from "../contract/index.js";
 import type { OpenWorkAdapter, StagedAttachment, AttachmentPrompt } from "./types.js";
 interface Connection {
@@ -88,6 +90,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     private qualifiedSessionActions = false,
     private qualifiedSessionSearch = false,
     private qualifiedWorkspaceDefaults = false,
+    private qualifiedSkills = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -227,6 +230,9 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       deleteSession: supported && this.qualifiedWrites && this.qualifiedSessionActions,
       searchSessions: supported && this.qualifiedSessionSearch,
       workspaceDefaults: supported && this.qualifiedWrites && this.qualifiedWorkspaceDefaults,
+      skillsRead: supported && this.qualifiedSkills,
+      skillsWrite: supported && this.qualifiedWrites && this.qualifiedSkills,
+      skillsSelect: supported && this.qualifiedWrites && this.qualifiedSkills,
     };
   }
   async listWorkspaces() {
@@ -541,9 +547,9 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     if (this.capabilities[key] !== true)
       throw new BridgeError("UNSUPPORTED_ACTION", 422);
   }
-  private attachments() {
+  private attachments(check=()=>{}) {
     this.enabled('attachments');
-    return new NativeAttachments((path, method, body, signal) => this.request(path, method, body, signal));
+    return new NativeAttachments(async(path, method, body, signal) => {check();const value=await this.request(path, method, body, signal);check();return value});
   }
   async readAttachmentLimits(wid: string, sid: string, signal?: AbortSignal) {
     return this.attachments().limits(wid, sid, signal);
@@ -551,8 +557,10 @@ export class OpenWorkV2 implements OpenWorkAdapter {
   async uploadAttachment(wid: string, sid: string, file: StagedAttachment, signal: AbortSignal) {
     return this.attachments().upload(wid, sid, file, signal);
   }
-  async sendAttachments(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal) {
-    return this.attachments().send(wid, sid, prompt, signal);
+  async sendAttachments(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal, check=()=>{}) {
+    if(prompt.selectedSkillIds?.length)this.enabled('skillsSelect');
+    const skills=prompt.selectedSkillIds?.length?await this.skills(check).selected(wid,sid,prompt.selectedSkillIds,signal):undefined;
+    return this.attachments(check).send(wid, sid, prompt, signal, skills);
   }
   async create(wid: string) {
     this.enabled("createSession");
@@ -643,6 +651,39 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       "POST",
       { reply: decision === "allowOnce" ? "once" : "reject" },
     );
+  }
+  private skills(check:()=>void) {
+    return new NativeSkills(async(route,method,body,signal)=>{
+      check();this.enabled("skillsRead");
+      const response=await this.response(route,method,body,AbortSignal.any([signal,AbortSignal.timeout(method==="GET"?15000:30000)]));
+      const reader=response.body?.getReader(),chunks:Buffer[]=[];let bytes=0;
+      try {if(reader)for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>8*1024*1024)throw new BridgeError("SNAPSHOT_TOO_LARGE",413);chunks.push(Buffer.from(part.value));}}catch(e){await reader?.cancel().catch(()=>{});throw e;}
+      let value:unknown;try{value=JSON.parse(Buffer.concat(chunks).toString("utf8"))}catch{throw new BridgeError("INVALID_UPSTREAM",502)}
+      if(!response.ok){
+        const code=record(value)?value.code:null;
+        if(code==="skill_changed"&&response.status===409)throw new PreflightError("STALE_SETTINGS",409);
+        if(code==="write_denied"&&response.status===403)throw new PreflightError("SKILL_WRITE_DENIED",422);
+        if(code==="skill_protected"&&response.status===403)throw new PreflightError("SKILL_PROTECTED",422);
+        if(code==="skill_not_found"&&response.status===404)throw new PreflightError("NOT_FOUND",404);
+        if(code==="request_cancelled"&&response.status===409)throw new PreflightError("SKILL_CANCELLED",409);
+        if(typeof code==="string"&&["invalid_skill_payload","invalid_skill_name","invalid_skill_content","invalid_description","skill_too_large"].includes(code)&&[400,422].includes(response.status))throw new PreflightError("SKILL_INVALID",422);
+        throw new BridgeError("UPSTREAM_REJECTED",502);
+      }
+      check();return value;
+    },check);
+  }
+  async readSkills(wid:string,signal:AbortSignal,check=()=>{}) {this.enabled("skillsRead");return this.skills(check).list(wid,signal)}
+  async readSkill(wid:string,id:string,signal:AbortSignal,check=()=>{}) {this.enabled("skillsRead");return this.skills(check).read(wid,id,signal)}
+  async saveSkill(wid:string,input:SkillSave,signal:AbortSignal,check=()=>{}) {this.enabled("skillsWrite");return this.skills(check).save(wid,input,signal)}
+  async deleteSkill(wid:string,id:string,revision:string,signal:AbortSignal,check=()=>{}) {this.enabled("skillsWrite");return this.skills(check).delete(wid,id,revision,signal)}
+  async sendSkills(wid:string,sid:string,text:string,ids:string[],signal:AbortSignal,check=()=>{}) {
+    this.enabled("skillsSelect");check();
+    const native=obj(obj(await this.request(this.base(wid)+"/session/"+safeId(sid),"GET",undefined,signal)).data),model=obj(native.model);
+    if(native.id!==sid||typeof model.providerID!=="string"||typeof model.id!=="string")throw new PreflightError("MODEL_REQUIRED",422);
+    const skills=await this.skills(check).selected(wid,sid,ids,signal);check();
+    await this.request(this.base(wid)+"/session/"+safeId(sid)+"/model","POST",{model:{providerID:model.providerID,id:model.id,...(typeof model.variant==="string"?{variant:model.variant}:{})}},signal);check();
+    const result=obj(await this.request(this.base(wid)+"/session/"+safeId(sid)+"/prompt","POST",{text,skills},signal));
+    if(!record(result.data))throw new BridgeError("OUTCOME_UNKNOWN",502);check();
   }
   private workspaceDefaults(check:()=>void) {
     const read=async(wid:string,signal:AbortSignal)=>{check();const result=await this.request(`/workspace/${safeId(wid)}/default-model`,'GET',undefined,signal);check();return result;};

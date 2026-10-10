@@ -59,6 +59,7 @@ test("saved-device preview works while the store is locked without changing stat
         workspaceIds: ["one"],
         allWorkspaces: false,
         active: true,
+        features: {fileTransfer:false,workspaceAdministration:false,automationManagement:false},
       },
     ]);
     expect(await readFile(join(root, "state.json"), "utf8")).toBe(before);
@@ -69,6 +70,17 @@ test("saved-device preview works while the store is locked without changing stat
     await store.close();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("stopped-bridge device preview retains explicit feature grants without widening project access",async()=>{
+  const root=await mkdtemp(join(tmpdir(),"owr-grant-preview-")),store=await Store.open(root);
+  try{
+    const features={fileTransfer:true,workspaceAdministration:true,automationManagement:false};
+    await store.update(state=>state.devices.push({id:"phone",deviceId:"synthetic",name:"Phone",tokenHash:"a".repeat(64),workspaceIds:["one"],allWorkspaces:false,active:true,revoked:false,features}));
+    const before=await readFile(join(root,"state.json"),"utf8"),devices=await readSavedDevices(root);
+    expect(devices).toEqual([{id:"phone",name:"Phone",workspaceIds:["one"],allWorkspaces:false,active:true,features}]);
+    expect(await readFile(join(root,"state.json"),"utf8")).toBe(before);
+  }finally{await store.close();await rm(root,{recursive:true,force:true})}
 });
 
 test("local qualification follows the registry operator parser and defaults to no override", () => {
