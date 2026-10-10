@@ -345,7 +345,12 @@ export type UiControlBridgeInfo = {
 // The command map
 // ---------------------------------------------------------------------------
 
-export type RemoteProjectScope = { workspaceIds: string[]; allWorkspaces: boolean };
+export type RemoteFeatureGrants = {
+  fileTransfer: boolean;
+  workspaceAdministration: boolean;
+  automationManagement: boolean;
+};
+export type RemoteProjectScope = { workspaceIds: string[]; allWorkspaces: boolean; features?: RemoteFeatureGrants };
 export type RemoteDevice = RemoteProjectScope & { id: string; name: string; active: boolean };
 export type RemoteAccessStatus = {
   available: boolean;

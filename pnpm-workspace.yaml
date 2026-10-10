@@ -25,6 +25,23 @@ catalogs:
     react-dom: 18.2.0
 linkWorkspacePackages: true
 preferWorkspacePackages: true
+# Re-check the lockfile and peer bindings when the workspace configuration changes.
+optimisticRepeatInstall: false
+packageExtensions:
+  # Bind Motion's imported React types to the consuming application's React
+  # version instead of whichever unrelated @types/react is hoisted first.
+  "motion@12.38.0":
+    peerDependencies:
+      "@types/react": "^18.0.0 || ^19.0.0"
+    peerDependenciesMeta:
+      "@types/react":
+        optional: true
+  "framer-motion@12.38.0":
+    peerDependencies:
+      "@types/react": "^18.0.0 || ^19.0.0"
+    peerDependenciesMeta:
+      "@types/react":
+        optional: true
 supportedArchitectures:
   # Release jobs cross-package the second CPU architecture on the current OS.
   # Keeping both optional-native variants makes those artifacts runnable while

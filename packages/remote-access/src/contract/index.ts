@@ -24,6 +24,24 @@ export interface Capabilities {
   modelSettings?: boolean;
   renameSession?: boolean;
   savedPermissions?: boolean;
+  questions?: boolean;
+  attachments?: boolean;
+  artifacts?: boolean;
+  changes?: boolean;
+  sessionGroups?: boolean;
+  forkSession?: boolean;
+  deleteSession?: boolean;
+  searchSessions?: boolean;
+  workspaceDefaults?: boolean;
+  skillsRead?: boolean;
+  skillsWrite?: boolean;
+  automationsRead?: boolean;
+  automationsWrite?: boolean;
+}
+export interface DeviceFeatureGrants {
+  fileTransfer: boolean;
+  workspaceAdministration: boolean;
+  automationManagement: boolean;
 }
 export interface ModelSelection {
   providerId: string;

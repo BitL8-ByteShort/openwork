@@ -14,6 +14,7 @@ import {
 import type { OpenWorkAdapter } from "./adapters/types.js";
 import { Store, type Device } from "./storage/store.js";
 import { Pairing } from "./auth/pairing.js";
+import { FeatureOperations, normalizeFeatureGrants, authorizeWorkspace } from './auth/feature-access.js';
 import { Ledger } from "./mutations/ledger.js";
 import { adminHTML, adminJS, adminCSS } from "./admin/public.js";
 interface Options {
@@ -39,6 +40,7 @@ export function createServers(o: Options) {
   const hub = new EventHub(o.adapter);
   const devices = new WeakMap<FastifyRequest, Device>();
   const streams = new Map<string, Set<() => void>>();
+  const featureOperations = new FeatureOperations(id => o.store.snapshot.devices.find(d => d.id === id));
   const host = (): Host =>
     assertContract("Host", {
       hostId: o.store.snapshot.hostId,
@@ -58,6 +60,7 @@ export function createServers(o: Options) {
     origin: o.origin,
     host,
     closeDeviceStreams: (id) => {
+      featureOperations.cancelDevice(id);
       for (const close of streams.get(id) ?? []) close();
       streams.delete(id);
     },
@@ -135,9 +138,7 @@ export function createServers(o: Options) {
   };
   const scope = (req: FastifyRequest, wid: string) => {
     const d = device(req);
-    if (!d.allWorkspaces && !d.workspaceIds.includes(wid))
-      throw new BridgeError("FORBIDDEN", 403);
-    return d;
+    return authorizeWorkspace(d,wid);
   };
   const session = async (req: FastifyRequest, wid: string, sid: string) => {
     scope(req, wid);
@@ -188,10 +189,11 @@ export function createServers(o: Options) {
     return envelope(host());
   });
   remote.get("/v1/device/access", async (req) =>
-    envelope({
+    envelope(assertContract('DeviceAccess',{
       allWorkspaces: device(req).allWorkspaces ?? false,
       workspaceIds: device(req).workspaceIds,
-    }),
+      features: normalizeFeatureGrants(device(req).features),
+    })),
   );
   remote.get("/v1/workspaces", async (req) =>
     envelope(
@@ -568,5 +570,6 @@ export function createServers(o: Options) {
     "/admin/devices/:id/revoke",
     async (req) => envelope(await controls.revoke(req.params.id)),
   );
-  return { remote, admin, host, streams, token, hub, controls };
+  remote.addHook('onClose',async () => { featureOperations.close(); });
+  return { remote, admin, host, streams, token, hub, controls, featureOperations };
 }

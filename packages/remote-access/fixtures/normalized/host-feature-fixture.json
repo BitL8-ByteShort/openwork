@@ -1,0 +1,39 @@
+{
+  "type": "Host",
+  "value": {
+    "hostId": "12345678-1234-4234-8234-123456789abc",
+    "displayName": "Synthetic feature contract",
+    "platform": "linux",
+    "architecture": "x64",
+    "runtimeKind": "desktop",
+    "protocolVersion": 1,
+    "upstreamVersion": "0.18.57",
+    "compatibility": "supported",
+    "capabilities": {
+      "readSessions": true,
+      "readMessages": true,
+      "readStatus": true,
+      "events": true,
+      "createSession": true,
+      "sendText": true,
+      "stop": true,
+      "readApprovals": true,
+      "replyApproval": true,
+      "maxPromptBytes": 32768,
+      "protocolVersion": 1,
+      "questions": true,
+      "attachments": true,
+      "artifacts": true,
+      "changes": true,
+      "sessionGroups": true,
+      "forkSession": true,
+      "deleteSession": true,
+      "searchSessions": true,
+      "workspaceDefaults": true,
+      "skillsRead": true,
+      "skillsWrite": true,
+      "automationsRead": true,
+      "automationsWrite": true
+    }
+  }
+}
