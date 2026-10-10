@@ -1,0 +1,19 @@
+{
+  "type": "ChangeSet",
+  "value": {
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sessionId": "ses_fixture",
+    "provenance": "workspace",
+    "files": [
+      {
+        "id": "chg_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pathLabel": "notes/report.txt",
+        "status": "modified",
+        "binary": false,
+        "added": 2,
+        "removed": 1
+      }
+    ],
+    "moreOnComputer": false
+  }
+}

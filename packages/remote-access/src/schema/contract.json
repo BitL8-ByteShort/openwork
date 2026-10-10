@@ -1019,6 +1019,123 @@
           "type": "boolean"
         }
       }
+    },
+    "ChangeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "pathLabel",
+        "status",
+        "binary"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^chg_[a-f0-9]{32}$"
+        },
+        "pathLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^[^\\\\\\u0000-\\u001f\\u007f]+$"
+        },
+        "status": {
+          "enum": [
+            "added",
+            "modified",
+            "deleted",
+            "renamed",
+            "typeChanged"
+          ]
+        },
+        "binary": {
+          "type": "boolean"
+        },
+        "added": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20971520
+        },
+        "removed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20971520
+        }
+      }
+    },
+    "ChangeSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "sessionId",
+        "provenance",
+        "files",
+        "moreOnComputer"
+      ],
+      "properties": {
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "provenance": {
+          "const": "workspace"
+        },
+        "files": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/ChangeRef"
+          }
+        },
+        "moreOnComputer": {
+          "type": "boolean"
+        },
+        "unavailableReason": {
+          "enum": [
+            "non_git",
+            "no_baseline",
+            "unsupported"
+          ]
+        }
+      }
+    },
+    "FileDiff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "changeId",
+        "binary",
+        "text",
+        "omitted"
+      ],
+      "properties": {
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^chg_[a-f0-9]{32}$"
+        },
+        "binary": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "omitted": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

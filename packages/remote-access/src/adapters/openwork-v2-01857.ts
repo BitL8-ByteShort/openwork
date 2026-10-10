@@ -80,6 +80,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     private qualifiedQuestions = false,
     private qualifiedAttachments = false,
     private qualifiedArtifacts = false,
+    private qualifiedChanges = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -213,6 +214,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       questions: supported && this.qualifiedWrites && this.qualifiedQuestions,
       attachments: supported && this.qualifiedWrites && this.qualifiedAttachments,
       artifacts: supported && this.qualifiedArtifacts,
+      changes: supported && this.qualifiedChanges,
     };
   }
   async listWorkspaces() {
@@ -259,8 +261,8 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     if (s.id !== sid) throw new BridgeError("NOT_FOUND", 404);
     return s;
   }
-  async readArtifactContext(wid: string, sid: string, signal: AbortSignal) {
-    this.enabled('artifacts');
+  private async readFileContext(wid: string, sid: string, signal: AbortSignal) {
+    signal.throwIfAborted();
     const registry = obj(await this.request('/workspaces', 'GET', undefined, signal));
     const workspace = list(registry.items).find(w => record(w) && w.id === wid);
     if (!record(workspace) || typeof workspace.path !== 'string') throw new BridgeError('NOT_FOUND', 404);
@@ -269,6 +271,16 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     const session = obj(obj(await this.request(this.base(wid) + '/session/' + safeId(sid), 'GET', undefined, signal)).data);
     if (session.id !== sid) throw new BridgeError('NOT_FOUND', 404);
     if (!record(session.location) || typeof session.location.directory !== 'string') throw new BridgeError('INVALID_UPSTREAM', 502);
+    signal.throwIfAborted();
+    return { workspaceDirectory: workspace.path, executionDirectory: session.location.directory };
+  }
+  async readChangeContext(wid: string, sid: string, signal: AbortSignal) {
+    this.enabled('changes');
+    return this.readFileContext(wid, sid, signal);
+  }
+  async readArtifactContext(wid: string, sid: string, signal: AbortSignal) {
+    this.enabled('artifacts');
+    const context = await this.readFileContext(wid, sid, signal);
     const messages: unknown[] = [], seen = new Set<string>(); let cursor: string | undefined, moreOnComputer = false, limit = 50;
     for (let n = 0; n < 4; n++) {
       const q = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
@@ -291,7 +303,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     }
     const candidates = artifactCandidates(messages);
     signal.throwIfAborted();
-    return { workspaceDirectory: workspace.path, executionDirectory: session.location.directory, candidates: candidates.items,
+    return { ...context, candidates: candidates.items,
       moreOnComputer: moreOnComputer || candidates.moreOnComputer || cursor !== undefined };
   }
   async rename(wid: string, sid: string, title: string, previousTitle: string) {
