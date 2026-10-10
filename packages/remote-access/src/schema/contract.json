@@ -128,10 +128,7 @@
         },
         "platform": {
           "type": "string",
-          "enum": [
-            "macos",
-            "linux"
-          ]
+          "enum": ["macos", "linux"]
         },
         "architecture": {
           "type": "string",
@@ -139,10 +136,7 @@
         },
         "runtimeKind": {
           "type": "string",
-          "enum": [
-            "desktop",
-            "standalone"
-          ]
+          "enum": ["desktop", "standalone"]
         },
         "protocolVersion": {
           "const": 1
@@ -153,11 +147,7 @@
         },
         "compatibility": {
           "type": "string",
-          "enum": [
-            "supported",
-            "incompatible",
-            "unavailable"
-          ]
+          "enum": ["supported", "incompatible", "unavailable"]
         },
         "capabilities": {
           "$ref": "#/$defs/Capabilities"
@@ -167,10 +157,7 @@
     "Workspace": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "name"
-      ],
+      "required": ["id", "name"],
       "properties": {
         "id": {
           "type": "string",
@@ -239,10 +226,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "kind",
-            "text"
-          ],
+          "required": ["kind", "text"],
           "properties": {
             "kind": {
               "const": "text"
@@ -256,11 +240,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "kind",
-            "text",
-            "language"
-          ],
+          "required": ["kind", "text", "language"],
           "properties": {
             "kind": {
               "const": "code"
@@ -285,12 +265,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "kind",
-            "name",
-            "status",
-            "summary"
-          ],
+          "required": ["kind", "name", "status", "summary"],
           "properties": {
             "kind": {
               "const": "tool"
@@ -312,10 +287,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "kind",
-            "label"
-          ],
+          "required": ["kind", "label"],
           "properties": {
             "kind": {
               "const": "omitted"
@@ -329,10 +301,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "kind",
-            "label"
-          ],
+          "required": ["kind", "label"],
           "properties": {
             "kind": {
               "const": "unsupported"
@@ -348,14 +317,7 @@
     "Message": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "sessionId",
-        "role",
-        "createdAt",
-        "blocks",
-        "state"
-      ],
+      "required": ["id", "sessionId", "role", "createdAt", "blocks", "state"],
       "properties": {
         "id": {
           "type": "string",
@@ -367,11 +329,7 @@
         },
         "role": {
           "type": "string",
-          "enum": [
-            "user",
-            "assistant",
-            "system"
-          ]
+          "enum": ["user", "assistant", "system"]
         },
         "createdAt": {
           "type": "string",
@@ -386,24 +344,14 @@
         },
         "state": {
           "type": "string",
-          "enum": [
-            "streaming",
-            "complete",
-            "error",
-            "cancelled"
-          ]
+          "enum": ["streaming", "complete", "error", "cancelled"]
         }
       }
     },
     "SessionStatus": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "phase",
-        "observedAt",
-        "activeTurnId",
-        "errorCode"
-      ],
+      "required": ["phase", "observedAt", "activeTurnId", "errorCode"],
       "properties": {
         "phase": {
           "type": "string",
@@ -486,10 +434,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": [
-              "allowOnce",
-              "deny"
-            ]
+            "enum": ["allowOnce", "deny"]
           },
           "maxItems": 2,
           "uniqueItems": true
@@ -503,12 +448,7 @@
     "MutationReceipt": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "requestId",
-        "resourceId",
-        "state",
-        "observedAt"
-      ],
+      "required": ["requestId", "resourceId", "state", "observedAt"],
       "properties": {
         "requestId": {
           "type": "string",
@@ -544,11 +484,7 @@
     "PairClaim": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "claimId",
-        "pollToken",
-        "expiresAt"
-      ],
+      "required": ["claimId", "pollToken", "expiresAt"],
       "properties": {
         "claimId": {
           "type": "string",
@@ -567,18 +503,11 @@
     "PairPoll": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "state"
-      ],
+      "required": ["state"],
       "properties": {
         "state": {
           "type": "string",
-          "enum": [
-            "pending",
-            "denied",
-            "expired",
-            "approved"
-          ]
+          "enum": ["pending", "denied", "expired", "approved"]
         },
         "credential": {
           "type": "string",
@@ -600,19 +529,12 @@
     "Error": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "error"
-      ],
+      "required": ["error"],
       "properties": {
         "error": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "code",
-            "message",
-            "retryable",
-            "requestId"
-          ],
+          "required": ["code", "message", "retryable", "requestId"],
           "properties": {
             "code": {
               "type": "string",
@@ -636,9 +558,7 @@
     "EventHint": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "kind"
-      ],
+      "required": ["kind"],
       "properties": {
         "kind": {
           "type": "string",
@@ -663,9 +583,7 @@
     "RequestId": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "requestId"
-      ],
+      "required": ["requestId"],
       "properties": {
         "requestId": {
           "type": "string",
@@ -676,11 +594,7 @@
     "ApprovalReply": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "requestId",
-        "decision",
-        "revision"
-      ],
+      "required": ["requestId", "decision", "revision"],
       "properties": {
         "requestId": {
           "type": "string",
@@ -688,10 +602,7 @@
         },
         "decision": {
           "type": "string",
-          "enum": [
-            "allowOnce",
-            "deny"
-          ]
+          "enum": ["allowOnce", "deny"]
         },
         "revision": {
           "type": "string",
@@ -745,10 +656,7 @@
     "DeviceAccess": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "allWorkspaces",
-        "workspaceIds"
-      ],
+      "required": ["allWorkspaces", "workspaceIds"],
       "properties": {
         "allWorkspaces": {
           "type": "boolean"
@@ -763,6 +671,163 @@
         },
         "features": {
           "$ref": "#/$defs/DeviceFeatureGrants"
+        }
+      }
+    },
+    "QuestionOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "label", "description"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      }
+    },
+    "QuestionField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "kind", "title", "prompt", "options", "custom"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "kind": {
+          "enum": ["text", "singleChoice", "multipleChoice"]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "prompt": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "custom": {
+          "type": "boolean"
+        },
+        "options": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/QuestionOption"
+          }
+        }
+      }
+    },
+    "Question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sessionId",
+        "revision",
+        "supported",
+        "reason",
+        "fields"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,200}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,200}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "supported": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "maxLength": 4096
+        },
+        "fields": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/QuestionField"
+          }
+        }
+      }
+    },
+    "QuestionList": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/Question"
+      }
+    },
+    "QuestionDismiss": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "revision"],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "QuestionReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "revision", "answers"],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "answers": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 32,
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32768
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 101,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "maxLength": 32768
+                }
+              }
+            ]
+          }
         }
       }
     }

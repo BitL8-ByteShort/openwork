@@ -10,6 +10,8 @@ import type {
   Approval,
   Capabilities,
   Page,
+  QuestionRequest,
+  QuestionAnswers,
 } from "../contract/index.js";
 export interface OpenWorkAdapter {
   version: string;
@@ -26,8 +28,26 @@ export interface OpenWorkAdapter {
   ): Promise<Page<Message[]>>;
   readStatus(wid: string, sid: string): Promise<SessionStatus>;
   readApprovals(wid: string, sid: string): Promise<Approval[]>;
+  readQuestions?(
+    wid: string,
+    sid: string,
+    signal?: AbortSignal,
+  ): Promise<QuestionRequest[]>;
+  settleQuestion?(
+    wid: string,
+    sid: string,
+    qid: string,
+    revision: string,
+    answers: QuestionAnswers | null,
+    signal?: AbortSignal,
+  ): Promise<void>;
   create(wid: string): Promise<string>;
-  rename(wid: string, sid: string, title: string, previousTitle: string): Promise<void>;
+  rename(
+    wid: string,
+    sid: string,
+    title: string,
+    previousTitle: string,
+  ): Promise<void>;
   send(wid: string, sid: string, text: string): Promise<void>;
   stop(wid: string, sid: string): Promise<boolean>;
   reply(

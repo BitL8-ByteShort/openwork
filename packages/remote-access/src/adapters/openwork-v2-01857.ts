@@ -1,4 +1,5 @@
 import { UpstreamControls } from "./controls.js";
+import { normalizeQuestion, validateQuestionAnswers } from "./questions.js";
 import { createHash } from "node:crypto";
 import {
   BridgeError,
@@ -12,6 +13,7 @@ import {
   type Session,
   type Message,
   type Approval,
+  type QuestionAnswers,
 } from "../contract/index.js";
 import type { OpenWorkAdapter } from "./types.js";
 interface Connection {
@@ -72,6 +74,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     // Supplied only by a desktop embedding its own same-source server. External
     // installations keep the independently qualified stable-version boundary.
     private bundledServerVersion?: string,
+    private qualifiedQuestions = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -127,8 +130,15 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     route: string,
     method = "GET",
     body?: unknown,
+    signal?: AbortSignal,
   ): Promise<unknown> {
-    const r = await this.response(route, method, body);
+    const boundedSignal = signal
+      ? AbortSignal.any([
+          signal,
+          AbortSignal.timeout(method === "GET" ? 15000 : 30000),
+        ])
+      : undefined;
+    const r = await this.response(route, method, body, boundedSignal);
     if (!r.ok) {
       await r.body?.cancel();
       throw new BridgeError(
@@ -191,6 +201,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       replyApproval: supported && this.qualifiedWrites,
       modelSettings: supported && this.qualifiedWrites,
       savedPermissions: supported && this.qualifiedWrites,
+      questions: supported && this.qualifiedWrites && this.qualifiedQuestions,
     };
   }
   async listWorkspaces() {
@@ -244,7 +255,11 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     if (current.title === title) return;
     if (current.title !== previousTitle)
       throw new PreflightError("STALE_TITLE", 409);
-    await this.request(`${this.base(wid)}/session/${safeId(sid)}/rename`, "POST", { title });
+    await this.request(
+      `${this.base(wid)}/session/${safeId(sid)}/rename`,
+      "POST",
+      { title },
+    );
   }
   async readMessages(wid: string, sid: string, cursor?: string) {
     const q = new URLSearchParams({
@@ -348,6 +363,59 @@ export class OpenWorkV2 implements OpenWorkAdapter {
           createdAt: new Date(0).toISOString(),
         };
       }),
+    );
+  }
+  async readQuestions(wid: string, sid: string, signal?: AbortSignal) {
+    this.enabled("questions");
+    const j = obj(
+      await this.request(
+        `${this.base(wid)}/session/${safeId(sid)}/form`,
+        "GET",
+        undefined,
+        signal,
+      ),
+    );
+    const forms = list(j.data);
+    if (forms.length > 32) throw new BridgeError("SNAPSHOT_TOO_LARGE", 413);
+    return assertContract(
+      "QuestionList",
+      forms.map((v) => normalizeQuestion(v, sid)),
+    );
+  }
+  async settleQuestion(
+    wid: string,
+    sid: string,
+    qid: string,
+    revision: string,
+    answers: QuestionAnswers | null,
+    signal?: AbortSignal,
+  ) {
+    if (this.capabilities.questions !== true)
+      throw new PreflightError("UNSUPPORTED_ACTION", 422);
+    const path = `${this.base(wid)}/session/${safeId(sid)}/form/${safeId(qid)}`;
+    let fresh;
+    try {
+      fresh = normalizeQuestion(
+        obj(await this.request(path, "GET", undefined, signal)).data,
+        sid,
+      );
+    } catch (e) {
+      if (signal?.aborted) throw new PreflightError("FORBIDDEN", 403);
+      if (e instanceof BridgeError)
+        throw new PreflightError(e.code, e.status, e.retryable);
+      throw e;
+    }
+    if (fresh.id !== qid) throw new PreflightError("NOT_FOUND", 404);
+    if (fresh.revision !== revision)
+      throw new PreflightError("STALE_QUESTION", 409);
+    if (!fresh.supported) throw new PreflightError("UNSUPPORTED_ACTION", 422);
+    if (answers !== null) validateQuestionAnswers(fresh, answers);
+    if (signal?.aborted) throw new PreflightError("FORBIDDEN", 403);
+    await this.request(
+      path + (answers === null ? "/cancel" : "/reply"),
+      "POST",
+      answers === null ? undefined : { answer: answers },
+      signal,
     );
   }
   private enabled(key: keyof Capabilities) {

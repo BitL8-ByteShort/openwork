@@ -123,6 +123,28 @@ export interface Approval {
   supportedDecisions: ("allowOnce" | "deny")[];
   createdAt: string;
 }
+export interface QuestionOption {
+  value: string;
+  label: string;
+  description: string;
+}
+export interface QuestionField {
+  key: string;
+  kind: "text" | "singleChoice" | "multipleChoice";
+  title: string;
+  prompt: string;
+  options: QuestionOption[];
+  custom: boolean;
+}
+export interface QuestionRequest {
+  id: string;
+  sessionId: string;
+  revision: string;
+  supported: boolean;
+  reason: string | null;
+  fields: QuestionField[];
+}
+export type QuestionAnswers = Record<string, string | string[]>;
 export interface MutationReceipt {
   requestId: string;
   resourceId: string | null;
