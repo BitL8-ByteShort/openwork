@@ -2,6 +2,7 @@ import { createServer, type RequestListener, type ServerResponse } from "node:ht
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { chrome } from "@openwork/hosts";
+import { syntheticUserPrompt } from "../packages/env/src/workbot-model-prompt.ts";
 import type { Place, Seed } from "@openwork/env";
 import { bootWorkbot, signInWorkbot } from "../../worlds/lib/workbot.ts";
 
@@ -67,10 +68,8 @@ export async function workbotFirstUse(_seed: Seed, context: { place: Place }, fa
         const raw: unknown = JSON.parse(await bodyOf(request));
         if (!record(raw) || !Array.isArray(raw.messages)) throw new Error("Invalid model request");
         const messages = raw.messages.filter(record);
-        const userTexts = messages.filter((message) => message.role === "user").flatMap((message) => Array.isArray(message.content) ? message.content.filter(record).filter((part) => part.type === "text").map((part) => String(part.text)) : []);
-        const prompt = userTexts.at(-1) ?? "";
+        const { prompt, index: promptIndex } = syntheticUserPrompt(messages);
         const transcript = JSON.stringify(messages);
-        const promptIndex = messages.findLastIndex((message) => message.role === "user" && Array.isArray(message.content) && message.content.some((part) => record(part) && part.type === "text" && part.text === prompt));
         const current = messages.slice(Math.max(0, promptIndex));
         const called = (name: string) => current.some((message) => Array.isArray(message.content) && message.content.some((part) => record(part) && part.type === "tool_use" && part.name === name));
         if (transcript.includes(TITLE)) witness.titleStayedOutOfSystem &&= !JSON.stringify(raw.system).includes(TITLE);
