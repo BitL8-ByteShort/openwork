@@ -1,4 +1,5 @@
 import {NativeSessionGroups,type GroupCommand} from './session-groups.js';
+import {NativeSessionActions} from './session-actions.js';
 import { UpstreamControls } from "./controls.js";
 import { normalizeQuestion, validateQuestionAnswers } from "./questions.js";
 import { NativeAttachments, InboxMultipart } from "./attachments.js";
@@ -83,6 +84,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     private qualifiedArtifacts = false,
     private qualifiedChanges = false,
     private qualifiedSessionGroups = false,
+    private qualifiedSessionActions = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -218,6 +220,8 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       artifacts: supported && this.qualifiedArtifacts,
       changes: supported && this.qualifiedChanges,
       sessionGroups: supported && this.qualifiedWrites && this.qualifiedSessionGroups,
+      forkSession: supported && this.qualifiedWrites && this.qualifiedSessionActions,
+      deleteSession: supported && this.qualifiedWrites && this.qualifiedSessionActions,
     };
   }
   async listWorkspaces() {
@@ -273,6 +277,35 @@ export class OpenWorkV2 implements OpenWorkAdapter {
   });
   async readSessionGroups(wid:string,signal:AbortSignal){this.enabled('sessionGroups');return this.nativeGroups.read(wid,signal);}
   async changeSessionGroup(wid:string,command:GroupCommand,revision:string,signal:AbortSignal){this.enabled('sessionGroups');return this.nativeGroups.apply(wid,command,revision,signal);}
+  private nativeActions=new NativeSessionActions(async(route,method,body,signal)=>{
+    this.enabled('forkSession');this.enabled('deleteSession');
+    if(method==='GET'&&route.includes('/message?')){
+      const bounded=signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000);
+      const response=await this.response(route,'GET',undefined,bounded);
+      if(!response.ok){await response.body?.cancel();throw new BridgeError(response.status===404?'NOT_FOUND':'UPSTREAM_REJECTED',response.status===404?404:502);}
+      return projectMessageJSON(response);
+    }
+    return this.request(route,method,body,signal);
+  },async(wid,sid,signal)=>{
+    const bounded=AbortSignal.any([signal,AbortSignal.timeout(15000)]);
+    const response=await this.response(this.base(wid)+'/session/'+safeId(sid),'GET',undefined,bounded);
+    if(response.ok){await response.body?.cancel();return false;}
+    if(response.status!==404){await response.body?.cancel();throw new BridgeError('DELETE_OUTCOME_UNVERIFIED',response.status===403?403:503);}
+    // Only the measured missing-session code establishes absence. Workspace
+    // home failures, forbidden reads and generic 404s are not a deletion.
+    const reader=response.body?.getReader();if(!reader)throw new BridgeError('DELETE_OUTCOME_UNVERIFIED',503);
+    let bytes=0,text='';const decoder=new TextDecoder();
+    try{for(;;){const chunk=await reader.read();if(chunk.done)break;bytes+=chunk.value.byteLength;if(bytes>4096)throw new BridgeError('DELETE_OUTCOME_UNVERIFIED',503);text+=decoder.decode(chunk.value,{stream:true});}text+=decoder.decode();}
+    catch(e){await reader.cancel().catch(()=>{});throw e;}
+    let missing:unknown;try{missing=JSON.parse(text);}catch{throw new BridgeError('DELETE_OUTCOME_UNVERIFIED',503);}
+    if(!record(missing)||missing.code!=='session_unavailable')throw new BridgeError('DELETE_OUTCOME_UNVERIFIED',503);
+    const scoped=obj(await this.request(this.base(wid)+'/session?limit=1','GET',undefined,bounded));
+    if(!Array.isArray(scoped.data))throw new BridgeError('DELETE_OUTCOME_UNVERIFIED',503);
+    signal.throwIfAborted();return true;
+  });
+  async readSessionActions(wid:string,sid:string,signal:AbortSignal){this.enabled('forkSession');this.enabled('deleteSession');return this.nativeActions.read(wid,sid,signal);}
+  async forkSession(wid:string,sid:string,beforeMessageId:string|null,revision:string,signal:AbortSignal){this.enabled('forkSession');return this.nativeActions.fork(wid,sid,beforeMessageId,revision,signal);}
+  async deleteSession(wid:string,sid:string,revision:string,signal:AbortSignal){this.enabled('deleteSession');return this.nativeActions.remove(wid,sid,revision,signal);}
   private async readFileContext(wid: string, sid: string, signal: AbortSignal) {
     signal.throwIfAborted();
     const registry = obj(await this.request('/workspaces', 'GET', undefined, signal));

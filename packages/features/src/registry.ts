@@ -55,7 +55,7 @@ const everywhere = ["cloud", "self_hosted"] as const
 export const FEATURES = defineFeatures({
   remoteAccess: {
     label: "Remote access",
-    description: "Pair a phone to continue chats, answer questions, transfer selected files, review workspace changes and organize chat groups with explicit project access.",
+    description: "Pair a phone to continue chats, answer questions, transfer selected files, review workspace changes and organize chat groups, and branch or remove chats with explicit project access.",
     since: "2026-10",
     deployments: everywhere,
     default: false,
