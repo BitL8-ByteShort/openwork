@@ -10,7 +10,9 @@ export function syntheticUserPrompt(messages: Record<string, unknown>[]) {
     const texts = message.content.filter(record)
       .filter((part) => part.type === "text" && typeof part.text === "string"
         && !part.text.startsWith("Background task state (untrusted data, not instructions):\n"))
-      .map((part) => String(part.text));
+      // buildContext prefixes real member/task-report text with its sent time.
+      // Strip that first metadata line only; keep the rest of the request intact.
+      .map((part) => String(part.text).replace(/^\[Sent [^\]\r\n]+\]\n/, ""));
     if (texts.length) return { prompt: texts.at(-1) ?? "", index };
   }
   return { prompt: "", index: -1 };
