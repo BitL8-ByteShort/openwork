@@ -15,7 +15,7 @@ Runs a private, single-organization OpenWork control plane (Den) on AWS
 | Certificate | Your ACM ARN, or created and DNS-validated in a Route 53 zone |
 | Secrets | One Secrets Manager secret, injected as ECS `secrets` |
 | Logs | CloudWatch `/ecs/<name>/den-api` and `/ecs/<name>/den-web` |
-| Headless runner and Workbot (optional) | `headless-runner` service (Service Connect, SQLite on EFS) and `workbot` at `chat.<domain_name>` (`headless_runner`, `workbot`) |
+| Headless runner and Workbot (optional) | Managed Node runner (Service Connect, SQLite on EFS) or an existing celld/S3 fleet; diskless `workbot` at `chat.<domain_name>` (`headless_runner`, `workbot`) |
 | OpenWork Web (optional) | `den-gateway` Fargate service at `web.<domain_name>`, sandboxes in your Daytona organization (`openwork_web_enabled = true`) |
 
 It sets the same environment the [`openwork-ee` Helm chart](../../../../packaging/helm/openwork-ee)
@@ -96,7 +96,8 @@ After `terraform apply`:
 - **Existing ECS cluster.** Set `ecs_cluster_arn` to deploy the two services
   into a cluster you already run; the module then creates no cluster. The
   services are named `den-api` and `den-web`, so they must not collide with
-  services already in that cluster. They use `launch_type = "FARGATE"`,
+  services already in that cluster; set `service_name_prefix` (for example
+  `openwork-`) to prefix every service name. They use `launch_type = "FARGATE"`,
   which overrides the cluster's default capacity provider strategy. The
   module still creates its own Cloud Map namespace (`<name>.internal`), ALB
   (unless you bring one, below), security groups and IAM roles.
@@ -163,9 +164,69 @@ keep `service_subnet_ids` in different availability zones).
     # model_protocol = "openai"; model_base_url = "https://…/v1" for OpenAI-compatible endpoints
   }
   workbot = {
-    enabled = true # https://chat.<domain_name>
+    enabled       = true # https://chat.<domain_name>
+    desired_count = 2    # encrypted-cookie sign-in, no disk or sticky sessions
   }
 ```
+
+Workbot stores sign-in state in encrypted cookies using one shared
+`WORKBOT_SESSION_SECRET` in Secrets Manager. It has no EFS mount or
+`WORKBOT_DB_PATH`; replicas use rolling deployments (100% minimum healthy,
+200% maximum). The managed Node runner still needs EFS and remains a single
+writer, regardless of Workbot's replica count.
+
+### Existing celld/S3 fleet
+
+To use an already deployed celld fleet instead of the managed Node runner:
+
+```hcl
+  headless_runner = {
+    enabled      = true
+    external_url = "https://cells.example.com"
+  }
+  headless_runner_token = var.cells_api_token # sensitive; fleet's HEADLESS_API_TOKEN
+  workbot = {
+    enabled       = true
+    desired_count = 2
+  }
+```
+
+Den and Workbot use this endpoint and receive its token through Secrets Manager.
+The module creates **no Node runner, runner token, EFS filesystem or mount targets**
+in this mode. The endpoint must be reachable from the task subnets. HTTPS is
+required except for a single-label private HTTP hostname such as
+`http://headless-cells:8795`; that hostname must resolve on your private network
+(the module does not register an external fleet with Service Connect).
+
+The fleet itself, its private peer networking and its S3/R2 bucket are managed
+separately. Deploy the worker with `celld deploy`, using the same stable worker
+and class names. Configure its model, MCP and computer settings there; this
+module's `headless_model_api_key` and `headless_computer` settings apply only to
+the managed Node runner. Cells require `HEADLESS_FILES=s3` (or `off`), with saved
+file bytes separate from the fleet database objects. Never put bucket credentials
+or fleet tokens in committed `.tfvars` files. See
+[`OWNER-CELLS.md`](../../../../ee/apps/headless-runner/OWNER-CELLS.md).
+
+**Required on Fargate and other temporary disks: set `CELLD_DURABILITY=bucket`
+on every fleet node.** The default `fleet` mode can keep acknowledged writes
+only on node-local disks until they reach the bucket. If all nodes stop
+together and lose those disks, celld refuses to open affected cells until it can
+verify the missing data. Bucket mode avoids that availability failure. Use
+`fleet` only with persistent `CELLD_WATCH` disks and stable node identities.
+Consider `CELLD_TTL_MS=30000` to tolerate brief bucket outages.
+
+**Migration safety:** upgrade Workbot to a build with encrypted-cookie sign-in
+before applying the diskless task definition. Older builds require the database.
+The plan removes Workbot's obsolete EFS access point; its old sign-in sessions no
+longer apply. Switching an existing deployment to `external_url` also plans to
+**destroy the managed runner and its EFS storage**. Do not apply that plan while
+you need the old conversations or a rollback: back up the data, retain the old
+resources outside this module's state/configuration, and inspect the full plan
+first. Conversations are not migrated into cells and in-flight turns can fail at
+cutover. To roll back using the retained Node runner, set `external_url` to its
+reachable private endpoint and pass its original token, rather than creating a
+fresh managed runner.
+
 
 - **Workbot** is a chat app at `workbot.domain_name` (default
   `chat.<domain_name>`; covered by a module-created certificate and Route 53).
