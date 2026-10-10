@@ -87,7 +87,7 @@ import {
   runDetachedTask,
 } from "./process-resilience.mjs";
 import { createQuitSequencer } from "./quit-sequence.mjs";
-import { createRemoteAccessManager, assertRemoteAccessSender } from "./remote-access.mjs";
+import { createRemoteAccessManager, assertRemoteAccessSender, remoteAccessLibraryPath } from "./remote-access.mjs";
 import { createRemoteNetwork } from "./remote-access-network.mjs";
 import { createRemoteAccessFeature } from "./remote-access-feature.mjs";
 import { adoptPreviewProfile, shouldRegisterDesktopProtocol } from "./preview-adoption.mjs";
@@ -1320,8 +1320,12 @@ const legacyRunnerBaseUrls = [
 ].map((value) => normalizeRunnerBaseUrl(value)).filter(Boolean);
 const automationRunnerDisabledBy = automationRunnerDisabledReason(process.env);
 /** @type {typeof import('../../../packages/remote-access/dist/index.js')} */
-const remoteAccessLibrary = require(existsSync(path.join(__dirname, "../remote-access/index.cjs"))
-  ? "../remote-access/index.cjs" : "../../../packages/remote-access/dist/index.cjs");
+const remoteAccessLibrary = require(remoteAccessLibraryPath({
+  isPackaged: app.isPackaged,
+  packagedPath: path.join(__dirname, "../remote-access/index.cjs"),
+  developmentPath: path.join(__dirname, "../../../packages/remote-access/dist/index.cjs"),
+  exists: existsSync,
+}));
 const remoteServerVersion = require(existsSync(path.join(__dirname, "../server/package.json"))
   ? "../server/package.json" : "../../server/package.json").version;
 const remotePlatform = process.platform === "darwin" ? "macos" : "linux";
