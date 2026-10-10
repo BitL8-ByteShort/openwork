@@ -1,0 +1,5 @@
+import {test,expect} from 'vitest';import {mkdtemp,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {Store} from '../src/storage/store.js';import {Ledger} from '../src/mutations/ledger.js';
+test('a stable skill receipt durably binds its written revision, independently of a later desktop edit',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'skill-version-receipt-')),store=await Store.open(root),id='skill_'+'a'.repeat(64),revision='b'.repeat(64),uuid='00000000-0000-4000-8000-000000000001';let writes=0;
+ try{const ledger=new Ledger(store),first=await ledger.perform('synthetic',uuid,'/skills/save',{name:'synthetic'},async()=>{writes++;return {resourceId:id,resourceRevision:revision}}),again=await ledger.perform('synthetic',uuid,'/skills/save',{name:'synthetic'},async()=>{throw Error('Do not write twice')});expect(first.resourceId).toBe(id);expect(first.resourceRevision).toBe(revision);expect(again).toEqual(first);expect(writes).toBe(1)}finally{await store.close();await rm(root,{recursive:true,force:true})}
+});

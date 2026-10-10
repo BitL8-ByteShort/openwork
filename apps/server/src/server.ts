@@ -1,3 +1,4 @@
+import { registerWorkspaceSkillRoutes } from "./routes/workspace-skills.js";
 import { createV2SessionHomes, nativeSession, nativeSessionDirectory } from "./opencode-v2-session-home.js";
 import { createNativeCloudMcpResolver, createRoutedCloudMcpRegistrar } from "./cloud-mcp-v2.js";
 import { managedDesktopPolicy } from "./managed-desktop-policy.js";
@@ -3667,6 +3668,14 @@ function createRoutes(
     }
     const result = await listPlugins(config, workspace.id, workspace.path, false);
     return jsonResponse(result);
+  });
+
+  registerWorkspaceSkillRoutes({routes,config,jsonResponse,readJsonBody,ensureWritable,requireClientScope,resolveWorkspace,requireApproval,
+    changed:async(ctx,workspace,name,path,action)=>{
+      await recordAudit(workspace.path,{id:shortId(),workspaceId:workspace.id,actor:ctx.actor??{type:"remote"},action:action==="removed"?"skills.delete":"skills.upsert",target:path,summary:`${action==="removed"?"Removed":"Saved"} workspace skill ${name}`,timestamp:Date.now()});
+      emitReloadEvent(ctx.reloadEvents,workspace,"skills",{type:"skill",name,action,path});
+      await engineV2Preview.settleWorkspaceSkills(workspace.path);
+    },
   });
 
   addRoute(routes, "GET", "/workspace/:id/skills", "client", async (ctx) => {

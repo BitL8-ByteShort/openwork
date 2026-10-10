@@ -100,6 +100,9 @@
         },
         "automationsWrite": {
           "type": "boolean"
+        },
+        "skillsSelect": {
+          "type": "boolean"
         }
       }
     },
@@ -538,6 +541,10 @@
         "observedAt": {
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+        },
+        "resourceRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         }
       }
     },
@@ -1705,6 +1712,154 @@
               ]
             }
           }
+        }
+      }
+    },
+    "SkillSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "source",
+        "editable",
+        "selectable",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^skill_[a-f0-9]{64}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "source": {
+          "enum": [
+            "workspace",
+            "inherited",
+            "global",
+            "managed"
+          ]
+        },
+        "editable": {
+          "type": "boolean"
+        },
+        "selectable": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "SkillCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "revision"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/SkillSummary"
+          }
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "SkillDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item",
+        "content"
+      ],
+      "properties": {
+        "item": {
+          "$ref": "#/$defs/SkillSummary"
+        },
+        "content": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        }
+      }
+    },
+    "SkillSave": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "name",
+        "content",
+        "revision",
+        "catalogRevision"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "catalogRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "SkillDelete": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "id",
+        "revision"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^skill_[a-f0-9]{64}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         }
       }
     }

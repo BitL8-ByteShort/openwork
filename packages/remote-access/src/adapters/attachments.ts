@@ -186,7 +186,7 @@ export class NativeAttachments {
       throw error;
     } finally { await source.close(); }
   }
-  async send(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal) {
+  async send(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal, skills?:Array<{id:string}>) {
     const files = await this.preflight(async () => {
       if (!/^msg_[a-f0-9]{32}$/.test(prompt.messageId) || !prompt.files.length || prompt.files.length > 4 ||
           new Set(prompt.files.map(f => f.id)).size !== prompt.files.length || Buffer.byteLength(prompt.text) > 32768 ||
@@ -216,7 +216,7 @@ export class NativeAttachments {
     });
     // After this point a malformed/lost receipt is uncertain, never a safe preflight retry.
     const reply = await this.request(this.base(wid) + '/session/' + safeID(sid) + '/prompt', 'POST',
-      { text: prompt.text, id: prompt.messageId, files }, signal);
+      { text: prompt.text, id: prompt.messageId, files, ...(skills?.length?{skills}:{}) }, signal);
     if (!record(reply) || !record(reply.data) || reply.data.id !== prompt.messageId || reply.data.sessionID !== sid)
       throw new BridgeError('INVALID_UPSTREAM', 502);
   }

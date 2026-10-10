@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile, mkdir, rm } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, rm, open, rename, link, unlink, rmdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -7,6 +7,8 @@ import { parseFrontmatter, buildFrontmatter } from "./frontmatter.js";
 import { exists } from "./utils.js";
 import { validateDescription, validateSkillName } from "./validators.js";
 import { ApiError } from "./errors.js";
+import { randomUUID } from "node:crypto";
+import { withSkillWrite, checkSkillRevision, textSkillPath, readSkillFile, MAX_SKILL_BYTES } from "./skill-write-guard.js";
 import { projectSkillsDir } from "./workspace-files.js";
 
 const INVALID_SKILL_DESCRIPTION = "ERROR: Invalid skill frontmatter";
@@ -77,10 +79,11 @@ async function parseSkillEntry(
   skillPath: string,
   entryName: string,
   scope: "project" | "global",
+  bounded = false,
 ): Promise<SkillItem | null> {
   let content: string;
   try {
-    content = await readFile(skillPath, "utf8");
+    content = bounded ? (await readSkillFile(skillPath)).content : await readFile(skillPath, "utf8");
   } catch (error) {
     console.warn("[openwork:skills] Skipping unreadable skill file", {
       path: skillPath,
@@ -142,7 +145,7 @@ async function parseSkillEntry(
   };
 }
 
-async function listSkillsInDir(dir: string, scope: "project" | "global"): Promise<SkillItem[]> {
+async function listSkillsInDir(dir: string, scope: "project" | "global", bounded = false): Promise<SkillItem[]> {
   if (!(await exists(dir))) return [];
   const entries = await readdir(dir, { withFileTypes: true });
   const groups = await Promise.all(
@@ -152,7 +155,7 @@ async function listSkillsInDir(dir: string, scope: "project" | "global"): Promis
       const skillPath = join(dir, entry.name, "SKILL.md");
       if (await exists(skillPath)) {
         // Direct skill: <dir>/<name>/SKILL.md
-        const item = await parseSkillEntry(skillPath, entry.name, scope);
+        const item = await parseSkillEntry(skillPath, entry.name, scope, bounded);
         return item ? [item] : [];
       }
 
@@ -175,7 +178,7 @@ async function listSkillsInDir(dir: string, scope: "project" | "global"): Promis
           const subSkillPath = join(domainDir, subEntry.name, "SKILL.md");
           if (!(await exists(subSkillPath))) return [];
 
-          const item = await parseSkillEntry(subSkillPath, subEntry.name, scope);
+          const item = await parseSkillEntry(subSkillPath, subEntry.name, scope, bounded);
           return item ? [item] : [];
         }),
       );
@@ -185,7 +188,7 @@ async function listSkillsInDir(dir: string, scope: "project" | "global"): Promis
   return groups.flat();
 }
 
-export async function listSkills(workspaceRoot: string, includeGlobal: boolean): Promise<SkillItem[]> {
+export async function listSkills(workspaceRoot: string, includeGlobal: boolean, deduplicate = true, bounded = false): Promise<SkillItem[]> {
   const roots = await findWorkspaceRoots(workspaceRoot);
   const dirs: { dir: string; scope: "project" | "global" }[] = [];
   for (const root of roots) {
@@ -206,9 +209,10 @@ export async function listSkills(workspaceRoot: string, includeGlobal: boolean):
     dirs.push({ dir: globalAgentLegacy, scope: "global" });
   }
 
-  const groups = await Promise.all(dirs.map(({ dir, scope }) => listSkillsInDir(dir, scope)));
+  const groups = await Promise.all(dirs.map(({ dir, scope }) => listSkillsInDir(dir, scope, bounded)));
   const items = groups.flat();
 
+  if (!deduplicate) return items;
   const seen = new Set<string>();
   return items.filter((item) => {
     if (seen.has(item.name)) return false;
@@ -221,6 +225,7 @@ export type UpsertSkillPayload = {
   name: string;
   content: string;
   description?: string;
+  expectedRevision?: string | null;
 };
 
 export function buildSkillContent(payload: UpsertSkillPayload): { name: string; content: string } {
@@ -262,18 +267,47 @@ export async function upsertSkill(
   workspaceRoot: string,
   payload: UpsertSkillPayload,
 ): Promise<{ path: string; action: "added" | "updated" }> {
-  const skill = buildSkillContent(payload);
-
-  const baseDir = projectSkillsDir(workspaceRoot);
-  const skillDir = join(baseDir, skill.name);
-  await mkdir(skillDir, { recursive: true });
-  const skillPath = join(skillDir, "SKILL.md");
-  const existed = await exists(skillPath);
-  await writeFile(skillPath, skill.content, "utf8");
-  return { path: skillPath, action: existed ? "updated" : "added" };
+  return withSkillWrite(workspaceRoot, async () => {
+    const skill = buildSkillContent(payload);
+    const conditional = payload.expectedRevision !== undefined;
+    if (conditional && Buffer.byteLength(skill.content) > MAX_SKILL_BYTES) throw new ApiError(422, "skill_too_large", "Skill text exceeds 64 KiB");
+    if (conditional) {
+      await checkSkillRevision(workspaceRoot, skill.name, payload.expectedRevision!);
+      if (payload.expectedRevision === null && (await listSkills(workspaceRoot, true, false, true)).some(item => item.name === skill.name)) {
+        throw new ApiError(409, "skill_changed", "This skill name already exists. Choose another name");
+      }
+    }
+    const baseDir = projectSkillsDir(workspaceRoot), skillDir = join(baseDir, skill.name);
+    await mkdir(skillDir, { recursive: true });
+    if (conditional) await textSkillPath(workspaceRoot, skill.name);
+    const skillPath = join(skillDir, "SKILL.md"), existed = await exists(skillPath);
+    if (!conditional) { await writeFile(skillPath, skill.content, "utf8"); return { path: skillPath, action: existed ? "updated" : "added" }; }
+    // Write complete text privately first. Never truncate the current file.
+    const temporary = join(skillDir, ".openwork-skill-" + randomUUID());
+    const handle = await open(temporary, "wx", 0o600);
+    try { await handle.writeFile(skill.content, "utf8"); await handle.sync(); } finally { await handle.close(); }
+    try {
+      // The temporary file is owned by this call; the guard ignores it below.
+      const current = await readSkillFile(skillPath).catch(error => {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (payload.expectedRevision === null ? current !== null : current?.revision !== payload.expectedRevision) throw new ApiError(409, "skill_changed", "This skill changed. Refresh before editing");
+      if (payload.expectedRevision === null) { await link(temporary, skillPath); await unlink(temporary); }
+      else await rename(temporary, skillPath);
+    } finally { await unlink(temporary).catch(error => { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }); }
+    return { path: skillPath, action: existed ? "updated" : "added" };
+  });
 }
 
-export async function deleteSkill(workspaceRoot: string, name: string): Promise<{ path: string }> {
+export async function deleteSkill(workspaceRoot: string, name: string, condition?: { expectedRevision: string }): Promise<{ path: string }> {
+  return withSkillWrite(workspaceRoot, async () => {
+  if (condition) {
+    const target = await checkSkillRevision(workspaceRoot, name, condition.expectedRevision);
+    await unlink(target.path);
+    await rmdir(dirname(target.path)).catch(error => { if (!(error instanceof Error && "code" in error && error.code === "ENOTEMPTY")) throw error; });
+    return { path: dirname(target.path) };
+  }
   const trimmed = name.trim();
   validateSkillName(trimmed);
   const baseDir = projectSkillsDir(workspaceRoot);
@@ -293,4 +327,5 @@ export async function deleteSkill(workspaceRoot: string, name: string): Promise<
   const skillDir = dirname(item.path);
   await rm(skillDir, { recursive: true, force: true });
   return { path: skillDir };
+  });
 }

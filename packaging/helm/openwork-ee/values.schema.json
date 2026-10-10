@@ -26,7 +26,7 @@
                 true,
                 false
               ],
-              "description": "Remote access: Pair a phone to continue chats, answer questions, transfer selected files, review workspace changes, organize groups, branch or remove chats and search older titles and manage new-chat defaults with explicit project access. Renders DEN_FEATURE_REMOTE_ACCESS."
+              "description": "Remote access: Pair a phone to continue chats, answer questions, transfer selected files, review workspace changes, organize groups, branch or remove chats and search older titles, manage new-chat defaults and inspect or edit workspace text skills with explicit project access. Renders DEN_FEATURE_REMOTE_ACCESS."
             },
             "installLinks": {
               "enum": [

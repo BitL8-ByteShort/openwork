@@ -35,6 +35,7 @@ export interface Capabilities {
   workspaceDefaults?: boolean;
   skillsRead?: boolean;
   skillsWrite?: boolean;
+  skillsSelect?: boolean;
   automationsRead?: boolean;
   automationsWrite?: boolean;
 }
@@ -161,10 +162,17 @@ export interface Attachment {
 }
 export interface AttachmentLimits { maxFileBytes: number; inputMIMEs: string[] }
 export interface AttachmentMutation { receipt: MutationReceipt; attachment: Attachment | null }
-export interface SendRequest { requestId: string; text: string; attachmentIds?: string[] }
+export interface SkillSummary { id:string;name:string;description:string;source:"workspace"|"inherited"|"global"|"managed";editable:boolean;selectable:boolean;revision:string }
+export interface SkillCatalog { items:SkillSummary[];revision:string }
+export interface SkillDetail { item:SkillSummary;content:string|null }
+export interface SkillSave { name:string;content:string;revision:string|null;catalogRevision:string }
+export interface SendRequest { requestId: string; text: string; attachmentIds?: string[];selectedSkillIds?:string[] }
+export interface SkillWriteResult {resourceId:string;resourceRevision:string}
+export type MutationResource = string|null|SkillWriteResult;
 export interface MutationReceipt {
   requestId: string;
   resourceId: string | null;
+  resourceRevision?:string;
   state: "pending" | "accepted" | "confirmed" | "rejected" | "outcome_unknown";
   observedAt: string;
 }
@@ -220,6 +228,7 @@ export function parseSend(value: unknown): SendRequest {
       throw new BridgeError("INVALID_REQUEST", 400);
     result.attachmentIds = value.attachmentIds;
   }
+  if(value.selectedSkillIds!==undefined){if(!Array.isArray(value.selectedSkillIds)||!value.selectedSkillIds.every((v:unknown):v is string=>typeof v==="string"))throw new BridgeError("INVALID_REQUEST",400);result.selectedSkillIds=value.selectedSkillIds;}
   return result;
 }
 export function record(v: unknown): v is Record<string, unknown> {

@@ -283,7 +283,7 @@ export class UploadStore {
       } finally { if (this.activeUploads.get(id) === controller) this.activeUploads.delete(id); }
     });
   }
-  async send(deviceId: string, wid: string, sid: string, requestId: string, text: string, ids: string[], lease: Lease) {
+  async send(deviceId: string, wid: string, sid: string, requestId: string, text: string, ids: string[], lease: Lease, selectedSkillIds?:string[]) {
     if (!ids.length || ids.length > 4 || new Set(ids).size !== ids.length)
       throw new PreflightError('INVALID_REQUEST', 400);
     return this.serialMany(ids, async () => {
@@ -314,7 +314,7 @@ export class UploadStore {
       try {
         lease.check();
         const messageId = 'msg_' + createHash('sha256').update(deviceId + '\u0000' + requestId).digest('hex').slice(0, 32);
-        await send(wid, sid, { text, messageId, files }, lease.signal);
+        await send(wid, sid, { text, messageId, files, ...(selectedSkillIds?.length?{selectedSkillIds}:{}) }, lease.signal, lease.check);
         await this.store.update(s => {
           for (const id of ids) { const r = s.uploads?.[id]; if (r) r.state = 'attached'; }
         });
