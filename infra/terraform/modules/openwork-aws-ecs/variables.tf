@@ -139,6 +139,17 @@ variable "ecs_cluster_arn" {
   }
 }
 
+variable "service_name_prefix" {
+  description = "Prefix for the ECS service names (den-api, den-web, ...). ECS service names must be unique in a cluster, so set it (for example \"openwork-\") when sharing ecs_cluster_arn with other services or another OpenWork deployment. Changing it on an existing deployment replaces the services."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = can(regex("^([A-Za-z][A-Za-z0-9_-]{0,31})?$", var.service_name_prefix))
+    error_message = "service_name_prefix must be empty or up to 32 letters, digits, hyphens or underscores, starting with a letter."
+  }
+}
+
 variable "cpu_architecture" {
   description = "X86_64 or ARM64 (Graviton). The published images support both."
   type        = string
@@ -307,10 +318,13 @@ variable "headless_runner" {
     OpenAI-compatible endpoint; key in headless_model_api_key) and reaches tools
     through Den's /mcp/agent. Runs as one task with its SQLite database on EFS
     (one mount target per service subnet, so service_subnet_ids must be in
-    different availability zones).
+    different availability zones). Set external_url to use an already deployed
+    celld/S3 fleet instead; this module then creates no Node runner or EFS.
+    Configure that fleet's model, computer and file storage separately.
   EOT
   type = object({
     enabled        = optional(bool, false)
+    external_url   = optional(string, "")
     model_protocol = optional(string, "anthropic")
     model_base_url = optional(string, "https://api.anthropic.com/v1")
     model          = optional(string, "")
@@ -323,6 +337,21 @@ variable "headless_runner" {
     condition     = contains(["anthropic", "openai"], var.headless_runner.model_protocol)
     error_message = "headless_runner.model_protocol must be anthropic or openai."
   }
+
+  validation {
+    condition = var.headless_runner.external_url == "" || can(regex(
+      "^(https://[A-Za-z0-9.-]+|http://[A-Za-z0-9-]+)(:[0-9]+)?$",
+      var.headless_runner.external_url
+    ))
+    error_message = "headless_runner.external_url must be an HTTPS origin, or an HTTP origin with a single-label private hostname, without a path or trailing slash."
+  }
+}
+
+variable "headless_runner_token" {
+  description = "Existing fleet's HEADLESS_API_TOKEN (at least 32 characters), required with headless_runner.external_url. Stored in Secrets Manager; only den-api and Workbot receive it. Ignored for the managed Node runner."
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "headless_computer" {
@@ -364,12 +393,18 @@ variable "headless_runner_image" {
 variable "workbot" {
   description = "Workbot: a chat app at domain_name (default chat.<domain_name>) whose turns run on the headless runner. Requires headless_runner.enabled."
   type = object({
-    enabled     = optional(bool, false)
-    domain_name = optional(string, "")
-    cpu         = optional(number, 256)
-    memory      = optional(number, 512)
+    enabled       = optional(bool, false)
+    domain_name   = optional(string, "")
+    cpu           = optional(number, 256)
+    memory        = optional(number, 512)
+    desired_count = optional(number, 1)
   })
   default = {}
+
+  validation {
+    condition     = var.workbot.desired_count >= 1 && floor(var.workbot.desired_count) == var.workbot.desired_count
+    error_message = "workbot.desired_count must be a positive integer."
+  }
 }
 
 variable "workbot_image" {

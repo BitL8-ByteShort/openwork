@@ -126,9 +126,9 @@ jobs:
   proof:
     needs: select
     if: needs.select.outputs.selected == 'true'
-    # Same runner as the nightly local journey lane; hosted ubuntu-latest lacks
-    # the setup Electron needs and every desktop proof died before CDP.
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Upstream retains its provisioned runner. Forks explicitly install the
+    # Linux browser and virtual display below on a GitHub-hosted Ubuntu image.
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -269,7 +269,7 @@ jobs:
   packaged-proof:
     needs: select
     if: needs.select.outputs.packagedSelected == 'true'
-    runs-on: ${{ matrix.os == 'macos' && 'blacksmith-12vcpu-macos-15' || 'blacksmith-4vcpu-ubuntu-2404' }}
+    runs-on: ${{ github.repository == 'different-ai/openwork' && (matrix.os == 'macos' && 'blacksmith-12vcpu-macos-15' || 'blacksmith-4vcpu-ubuntu-2404') || (matrix.os == 'macos' && 'macos-15' || 'ubuntu-24.04') }}
     timeout-minutes: ${{ matrix.os == 'macos' && 45 || 30 }}
     strategy:
       fail-fast: false
@@ -347,7 +347,7 @@ jobs:
             contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association) &&
             needs.select.outputs.internalContributor == 'true' &&
             'pr-internal-specs' || 'pr-slow-specs' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -421,7 +421,7 @@ jobs:
             contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association) &&
             needs.select.outputs.internalContributor == 'true' &&
             'pr-internal-specs' || 'pr-slow-specs' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -491,7 +491,7 @@ jobs:
             contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association) &&
             needs.select.outputs.internalContributor == 'true' &&
             'pr-internal-specs' || 'pr-slow-specs' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false

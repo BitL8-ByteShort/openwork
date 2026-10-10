@@ -16,6 +16,7 @@ import {
   getAutomationsRoute,
   getOrgAccessFlags,
   getPluginRoute,
+  orgFeatureEnabled,
 } from "../../../_lib/den-org";
 import { useDenFlow } from "../../../_providers/den-flow-provider";
 import {
@@ -117,13 +118,15 @@ export function DenCommandPalette({ open, onOpenChange }: DenCommandPaletteProps
   const { activeOrg, orgContext } = useOrgDashboard();
   const [query, setQuery] = useState("");
   const [recentIds, setRecentIds] = useState<string[]>([]);
-  const access = getOrgAccessFlags(
+  const access = useMemo(() => getOrgAccessFlags(
     orgContext?.currentMember.role ?? "member",
     orgContext?.currentMember.isOwner ?? false,
-    orgContext?.roles,
-  );
+    orgContext?.currentMember.permissions,
+  ), [orgContext?.currentMember.role, orgContext?.currentMember.isOwner, orgContext?.currentMember.permissions]);
   const capabilities = orgContext?.capabilities ?? EMPTY_CAPABILITIES;
-  const pluginsQuery = usePluginSummaries({ enabled: open && access.isAdmin });
+  const permissionsEnabled = orgFeatureEnabled(orgContext, "permissions");
+  // Plugin results open the admin plugin page, which needs `sharing.manage_all`.
+  const pluginsQuery = usePluginSummaries({ enabled: open && access.canManageAllShared });
   const automationsQuery = useAutomations({ enabled: open && capabilities.workflows });
 
   useEffect(() => {
@@ -153,21 +156,22 @@ export function DenCommandPalette({ open, onOpenChange }: DenCommandPaletteProps
       capabilities,
       orgMode: runtimeConfig.orgMode,
       runtimeConfigLoaded,
+      permissionsEnabled,
     });
     return flattenNavigationForSearch(sections)
       .filter((entry) => entry.href !== "#")
       .map((entry) => ({ ...entry, hint: entry.section }));
   }, [
-    access.canViewSettings,
-    access.isAdmin,
+    access,
     activeOrg?.slug,
     capabilities,
+    permissionsEnabled,
     runtimeConfig.orgMode,
     runtimeConfigLoaded,
   ]);
 
   const pluginEntries = useMemo<PaletteEntry[]>(() => {
-    if (!access.isAdmin || !activeOrg) return [];
+    if (!access.canManageAllShared || !activeOrg) return [];
     return (pluginsQuery.data ?? []).map((plugin) => ({
       id: `plugin:${plugin.id}`,
       label: plugin.name,
@@ -176,7 +180,7 @@ export function DenCommandPalette({ open, onOpenChange }: DenCommandPaletteProps
       hint: "Plugin",
       keywords: [plugin.slug, plugin.description, "skill", "marketplace"],
     }));
-  }, [access.isAdmin, activeOrg, pluginsQuery.data]);
+  }, [access.canManageAllShared, activeOrg, pluginsQuery.data]);
 
   const automationEntries = useMemo<PaletteEntry[]>(() => {
     if (!activeOrg || !capabilities.workflows) return [];

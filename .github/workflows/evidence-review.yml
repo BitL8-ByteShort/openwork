@@ -21,9 +21,13 @@ concurrency:
   group: evidence-review-${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}
   cancel-in-progress: false
 
+# Public preview publication depends on upstream-owned blob storage/review services.
+# Fork proof artifacts and focused compatibility checks remain available without
+# creating a permanently pending publication check for an unconfigured service.
 jobs:
   progress:
     if: >-
+      github.repository == 'different-ai/openwork' &&
       github.event_name == 'workflow_run' &&
       github.event.action != 'completed' &&
       github.event.workflow_run.name == 'PR change proof' &&
@@ -58,6 +62,7 @@ jobs:
       cancel-in-progress: false
     if: >-
       always() &&
+      github.repository == 'different-ai/openwork' &&
       ((github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
       (github.event_name == 'workflow_run' && github.event.action == 'completed' && github.event.workflow_run.name == 'PR change proof' && github.event.workflow_run.event == 'pull_request'))
     runs-on: ubuntu-latest
