@@ -1,5 +1,7 @@
 import { UpstreamControls } from "./controls.js";
 import { normalizeQuestion, validateQuestionAnswers } from "./questions.js";
+import { NativeAttachments, InboxMultipart } from "./attachments.js";
+import { projectMessageJSON } from "../messages/projection.js";
 import { createHash } from "node:crypto";
 import {
   BridgeError,
@@ -15,7 +17,7 @@ import {
   type Approval,
   type QuestionAnswers,
 } from "../contract/index.js";
-import type { OpenWorkAdapter } from "./types.js";
+import type { OpenWorkAdapter, StagedAttachment, AttachmentPrompt } from "./types.js";
 interface Connection {
   origin: string;
   token: string;
@@ -75,6 +77,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     // installations keep the independently qualified stable-version boundary.
     private bundledServerVersion?: string,
     private qualifiedQuestions = false,
+    private qualifiedAttachments = false,
   ) {}
   private validate(c: Connection) {
     const u = new URL(c.origin);
@@ -101,16 +104,20 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     try {
       this.connection ??= this.validate(await this.discover());
       const c = this.connection;
-      const r = await fetch(c.origin + route, {
+      const multipart = body instanceof InboxMultipart ? body : null;
+      const options: RequestInit & { duplex?: 'half' } = {
         method,
         redirect: "error",
         signal: signal ?? AbortSignal.timeout(method === "GET" ? 15000 : 30000),
         headers: {
           Authorization: `Bearer ${c.token}`,
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(body === undefined ? {} : { "Content-Type": multipart ? multipart.contentType : "application/json" }),
+          ...(multipart ? { 'Content-Length': String(multipart.length) } : {}),
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
+        ...(body === undefined ? {} : { body: multipart ? multipart.stream : JSON.stringify(body) }),
+        ...(multipart ? { duplex: 'half' } : {}),
+      };
+      const r = await fetch(c.origin + route, options);
       if (r.status === 401 && reload && method === "GET") {
         await r.body?.cancel();
         this.connection = this.validate(await this.discover());
@@ -202,6 +209,7 @@ export class OpenWorkV2 implements OpenWorkAdapter {
       modelSettings: supported && this.qualifiedWrites,
       savedPermissions: supported && this.qualifiedWrites,
       questions: supported && this.qualifiedWrites && this.qualifiedQuestions,
+      attachments: supported && this.qualifiedWrites && this.qualifiedAttachments,
     };
   }
   async listWorkspaces() {
@@ -262,17 +270,25 @@ export class OpenWorkV2 implements OpenWorkAdapter {
     );
   }
   async readMessages(wid: string, sid: string, cursor?: string) {
-    const q = new URLSearchParams({
-      limit: "50",
-      ...(cursor ? { cursor } : {}),
-    });
-    const j = obj(
-      await this.request(
-        `${this.base(wid)}/session/${safeId(sid)}/message?${q}`,
-      ),
-    );
+    // A native page may inline several large files. Retry only this read with
+    // a one-message page when its fixed wire/normalized bound is exceeded.
+    let j: Record<string, unknown> | undefined;
+    let limit = 50;
+    for (const count of [50, 1]) {
+      limit = count;
+      const q = new URLSearchParams({ limit: String(count), ...(cursor ? { cursor } : {}) });
+      const response = await this.response(`${this.base(wid)}/session/${safeId(sid)}/message?${q}`);
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new BridgeError(response.status === 404 ? 'NOT_FOUND' : response.status === 401 ? 'UPSTREAM_AUTH_FAILED' : 'UPSTREAM_REJECTED',
+          response.status === 404 ? 404 : response.status === 401 ? 503 : 502);
+      }
+      try { j = obj(await projectMessageJSON(response)); break; }
+      catch (error) { if (count !== 50 || !(error instanceof BridgeError) || error.code !== 'SNAPSHOT_TOO_LARGE') throw error; }
+    }
+    if (!j) throw new BridgeError('INVALID_UPSTREAM', 502);
     const rows = list(j.data);
-    if (rows.length > 50) throw new BridgeError("INVALID_UPSTREAM", 502);
+    if (rows.length > limit) throw new BridgeError("INVALID_UPSTREAM", 502);
     const data: Message[] = rows
       .flatMap((v) => {
         const m = obj(v);
@@ -286,11 +302,13 @@ export class OpenWorkV2 implements OpenWorkAdapter {
             sessionId: sid,
             role: type,
             createdAt: iso(time.created),
-            blocks: Array.isArray(m.content)
-              ? m.content.map(normalizeBlock)
-              : typeof m.text === "string"
-                ? [normalizeBlock({ type: "text", text: m.text })]
-                : [],
+            blocks: [
+              ...(Array.isArray(m.content) ? m.content.map(normalizeBlock) : typeof m.text === 'string' ? [normalizeBlock({ type: 'text', text: m.text })] : []),
+              ...(Array.isArray(m.files) ? m.files.slice(0, 4).map((f: unknown) => ({ kind: 'unsupported',
+                label: record(f) && typeof f.name === 'string' && f.name.trim() && Buffer.byteLength(f.name) <= 200 && !/[\/\\\x00-\x1f\x7f]/.test(f.name)
+                  ? 'Attached: ' + f.name : 'Attached file available on computer' })) : []),
+              ...(Array.isArray(m.files) && m.files.length > 4 ? [{ kind: 'omitted', label: 'More attached files available on computer' }] : []),
+            ],
             state:
               m.finish === "error"
                 ? record(m.error) && m.error.type === "aborted"
@@ -421,6 +439,19 @@ export class OpenWorkV2 implements OpenWorkAdapter {
   private enabled(key: keyof Capabilities) {
     if (this.capabilities[key] !== true)
       throw new BridgeError("UNSUPPORTED_ACTION", 422);
+  }
+  private attachments() {
+    this.enabled('attachments');
+    return new NativeAttachments((path, method, body, signal) => this.request(path, method, body, signal));
+  }
+  async readAttachmentLimits(wid: string, sid: string, signal?: AbortSignal) {
+    return this.attachments().limits(wid, sid, signal);
+  }
+  async uploadAttachment(wid: string, sid: string, file: StagedAttachment, signal: AbortSignal) {
+    return this.attachments().upload(wid, sid, file, signal);
+  }
+  async sendAttachments(wid: string, sid: string, prompt: AttachmentPrompt, signal: AbortSignal) {
+    return this.attachments().send(wid, sid, prompt, signal);
   }
   async create(wid: string) {
     this.enabled("createSession");
