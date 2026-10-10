@@ -1,4 +1,12 @@
 /** @typedef {import('../../../packages/remote-access/dist/index.js').BridgeRuntime} BridgeRuntime */
+/** Select the bridge artifact for the current execution mode.
+ * @param {{isPackaged: boolean, packagedPath: string, developmentPath: string, exists: (path: string) => boolean}} options
+ */
+export function remoteAccessLibraryPath({isPackaged, packagedPath, developmentPath, exists}) {
+  const selected = isPackaged ? packagedPath : developmentPath;
+  if (!exists(selected)) throw new Error("REMOTE_ACCESS_BUILD_MISSING");
+  return selected;
+}
 /** @typedef {Awaited<ReturnType<BridgeRuntime['controls']['state']>>} ControlState */
 /** @typedef {{
  * featureEnabled: () => Promise<boolean>,
