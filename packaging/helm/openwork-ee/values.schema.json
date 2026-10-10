@@ -28,6 +28,16 @@
               ],
               "description": "Remote access: Pair a phone to continue chats, answer questions, transfer selected files and review workspace changes with explicit project access. Renders DEN_FEATURE_REMOTE_ACCESS."
             },
+            "managedDeployments": {
+              "enum": [
+                "",
+                "true",
+                "false",
+                true,
+                false
+              ],
+              "description": "Managed deployments: Organization admins install OpenWork in their own cloud account (AWS first) and see its health and updates in OpenWork. Renders DEN_FEATURE_MANAGED_DEPLOYMENTS."
+            },
             "installLinks": {
               "enum": [
                 "",
@@ -48,6 +58,16 @@
               ],
               "description": "OpenWork Connect: Members see the organization's connections, marketplace capabilities on the agent rail, and the desktop Connect tab. Renders DEN_FEATURE_MCP_CONNECTIONS."
             },
+            "driveResumableUploads": {
+              "enum": [
+                "",
+                "true",
+                "false",
+                true,
+                false
+              ],
+              "description": "Resumable Google Drive uploads: Members upload larger workspace files to Google Drive and prepare upload sessions for external clients. Renders DEN_FEATURE_DRIVE_RESUMABLE_UPLOADS."
+            },
             "implicitCloudSkills": {
               "enum": [
                 "",
@@ -67,6 +87,16 @@
                 false
               ],
               "description": "Dashboard activity: Organization admins see recent additions and skill updates on their dashboard instead of Quick add. Renders DEN_FEATURE_DASHBOARD_ACTIVITY."
+            },
+            "skillUsage": {
+              "enum": [
+                "",
+                "true",
+                "false",
+                true,
+                false
+              ],
+              "description": "Skill usage: Organization admins see how often each skill is used, by how many people, and which ones nobody uses, so they can decide what to keep. Renders DEN_FEATURE_SKILL_USAGE."
             },
             "modelsAnalytics": {
               "enum": [
@@ -178,6 +208,16 @@
               ],
               "description": "AI Gateway: LiteLLM: Organization admins can connect their own LiteLLM proxy to AI Gateway, with one shared key, each person's own key, or keys OpenWork creates for each person. Renders DEN_FEATURE_LITELLM."
             },
+            "permissions": {
+              "enum": [
+                "",
+                "true",
+                "false",
+                true,
+                false
+              ],
+              "description": "Permissions: Organization admins choose what members, admins and each team can do, instead of the fixed Member and Admin defaults. Renders DEN_FEATURE_PERMISSIONS."
+            },
             "gatewayCloudSignIn": {
               "enum": [
                 "",
@@ -187,6 +227,26 @@
                 false
               ],
               "description": "AI Gateway: AWS and Microsoft sign-in: Organization admins can add Microsoft Foundry, and let each person sign in to Amazon Bedrock with AWS IAM Identity Center or to Microsoft Foundry with Microsoft Entra ID instead of sharing one key. Renders DEN_FEATURE_GATEWAY_CLOUD_SIGN_IN."
+            },
+            "engineV2Upgrade": {
+              "enum": [
+                "",
+                "true",
+                "false",
+                true,
+                false
+              ],
+              "description": "Desktop: upgrade prompt to OpenCode v2: Desktop members still on OpenCode v1 see a short notice offering to upgrade: their chats are copied to v2 with a backup, then OpenWork switches engines. Renders DEN_FEATURE_ENGINE_V2_UPGRADE."
+            },
+            "opencodePlugin": {
+              "enum": [
+                "",
+                "true",
+                "false",
+                true,
+                false
+              ],
+              "description": "OpenCode plugin sign-in: People can sign in to OpenWork from the OpenCode plugin, approve it as \"OpenWork - OpenCode Plugin\", and land back on OpenCode afterwards. Applies to the whole deployment; organization overrides have no effect. Renders DEN_FEATURE_OPENCODE_PLUGIN."
             },
             "platformAuditReads": {
               "enum": [

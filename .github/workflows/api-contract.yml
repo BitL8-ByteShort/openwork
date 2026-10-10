@@ -24,7 +24,7 @@ permissions:
 jobs:
   openapi-snapshot-and-lint:
     name: OpenAPI snapshot is current and lints clean
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ${{ github.repository == 'different-ai/openwork' && 'blacksmith-4vcpu-ubuntu-2204' || 'ubuntu-22.04' }}
     # Importing the live app initializes Better Auth's OAuth resource registry,
     # which needs a reachable database even though the snapshot itself never
     # reads one (same pattern as ci-sdk.yml).
