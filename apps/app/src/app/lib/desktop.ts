@@ -139,11 +139,15 @@ declare global {
           channel: "stable" | "alpha";
           feedUrl: string;
           currentVersion: string;
+          supported?: boolean;
+          reason?: string | null;
         }>;
         setChannel?: (channel: "stable" | "alpha") => Promise<{
           channel: "stable" | "alpha";
           feedUrl: string;
           currentVersion: string;
+          supported?: boolean;
+          reason?: string | null;
         }>;
         check?: (channel?: "stable" | "alpha", targetVersion?: string, options?: { preserveStaged?: boolean }) => Promise<{
           available: boolean;
@@ -647,6 +651,14 @@ const {
   setDesktopBootstrapConfig,
   connectLinkVerify,
   connectLinkAccept,
+  remoteAccessStatus,
+  remoteAccessSetEnabled,
+  remoteAccessFeatureSession,
+  remoteAccessPair,
+  remoteAccessApprove,
+  remoteAccessDeny,
+  remoteAccessUpdateScope,
+  remoteAccessRevoke,
   nukeOpenworkAndOpencodeConfigPreview,
   nukeOpenworkAndOpencodeConfigAndExit,
   openworkServerInfo,
@@ -687,6 +699,14 @@ export {
   setDesktopBootstrapConfig,
   connectLinkVerify,
   connectLinkAccept,
+  remoteAccessStatus,
+  remoteAccessSetEnabled,
+  remoteAccessFeatureSession,
+  remoteAccessPair,
+  remoteAccessApprove,
+  remoteAccessDeny,
+  remoteAccessUpdateScope,
+  remoteAccessRevoke,
   nukeOpenworkAndOpencodeConfigPreview,
   nukeOpenworkAndOpencodeConfigAndExit,
   openworkServerInfo,

@@ -53,6 +53,20 @@ function defineFeatures<const T extends Record<string, FeatureDefinition>>(featu
 const everywhere = ["cloud", "self_hosted"] as const
 
 export const FEATURES = defineFeatures({
+  remoteAccess: {
+    label: "Remote access",
+    description: "Pair a phone to continue and rename this computer's chats with explicit project access.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
+  managedDeployments: {
+    label: "Managed deployments",
+    description: "Organization admins install OpenWork in their own cloud account (AWS first) and see its health and updates in OpenWork.",
+    since: "2026-10",
+    deployments: ["cloud"],
+    default: false,
+  },
   installLinks: {
     label: "Install links",
     description: "Workspace admins can create desktop install links for their organization.",
@@ -67,6 +81,13 @@ export const FEATURES = defineFeatures({
     deployments: everywhere,
     default: true,
   },
+  driveResumableUploads: {
+    label: "Resumable Google Drive uploads",
+    description: "Members upload larger workspace files to Google Drive and prepare upload sessions for external clients.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
   implicitCloudSkills: {
     label: "Implicit Cloud skills",
     description: "Agents discover organization skills automatically without waiting for Cloud before starting a task.",
@@ -77,6 +98,13 @@ export const FEATURES = defineFeatures({
   dashboardActivity: {
     label: "Dashboard activity",
     description: "Organization admins see recent additions and skill updates on their dashboard instead of Quick add.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
+  skillUsage: {
+    label: "Skill usage",
+    description: "Organization admins see how often each skill is used, by how many people, and which ones nobody uses, so they can decide what to keep.",
     since: "2026-10",
     deployments: everywhere,
     default: false,
@@ -158,9 +186,30 @@ export const FEATURES = defineFeatures({
     deployments: everywhere,
     default: false,
   },
+  permissions: {
+    label: "Permissions",
+    description: "Organization admins choose what members, admins and each team can do, instead of the fixed Member and Admin defaults.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
   gatewayCloudSignIn: {
     label: "AI Gateway: AWS and Microsoft sign-in",
     description: "Organization admins can add Microsoft Foundry, and let each person sign in to Amazon Bedrock with AWS IAM Identity Center or to Microsoft Foundry with Microsoft Entra ID instead of sharing one key.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
+  engineV2Upgrade: {
+    label: "Desktop: upgrade prompt to OpenCode v2",
+    description: "Desktop members still on OpenCode v1 see a short notice offering to upgrade: their chats are copied to v2 with a backup, then OpenWork switches engines.",
+    since: "2026-10",
+    deployments: everywhere,
+    default: false,
+  },
+  opencodePlugin: {
+    label: "OpenCode plugin sign-in",
+    description: "People can sign in to OpenWork from the OpenCode plugin, approve it as \"OpenWork - OpenCode Plugin\", and land back on OpenCode afterwards. Applies to the whole deployment; organization overrides have no effect.",
     since: "2026-10",
     deployments: everywhere,
     default: false,

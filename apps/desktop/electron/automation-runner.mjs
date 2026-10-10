@@ -1,4 +1,4 @@
-import { createHeadlessThreadClient } from "@openwork/headless-threads"
+import { createHeadlessThreadClient, isHeadlessModelAccessError } from "@openwork/headless-threads"
 
 const EMPTY_USAGE = { inputTokens: null, outputTokens: null, costMicros: null }
 const RUNNER_WORK_POLL_MS = 60_000
@@ -22,7 +22,7 @@ export function classifyAutomationExecutionError(error) {
   if (error?.code === "model_access_lost") {
     return { code: "model_access_lost", message: raw }
   }
-  if (/ProviderModelNotFoundError/i.test(raw) || /model\s+not\s+found\s*:/i.test(raw)) {
+  if (isHeadlessModelAccessError(error)) {
     const identity = raw.match(/model\s+not\s+found\s*:\s*([^.,}\]"\n]+)/i)?.[1]?.trim()
     return {
       code: "model_access_lost",
@@ -595,11 +595,12 @@ async function requestJson(fetchImpl, baseUrl, token, requestPath, options = {})
   return payload
 }
 
-function createWorkspaceSessionClient(local, workspaceId, fetchImpl) {
+function createWorkspaceSessionClient(local, workspaceId, fetchImpl, requireModelAvailability = false) {
   return createHeadlessThreadClient({
     baseUrl: local.baseUrl,
     workspaceId,
     token: local.token,
+    requireModelAvailability,
     // Automation run receipts own recovery; desktop restart must not independently
     // resume an occurrence that its scheduler may already have settled or retried.
     fetch: (input, init) => {
@@ -607,7 +608,7 @@ function createWorkspaceSessionClient(local, workspaceId, fetchImpl) {
       headers.set("x-openwork-task-recovery", "off")
       return fetchImpl(input, { ...init, headers })
     },
-    requestTimeoutMs: 0,
+    requestTimeoutMs: requireModelAvailability ? 15_000 : 0,
   })
 }
 
@@ -727,7 +728,7 @@ export async function executeDesktopAutomation(assignment, options) {
   const listed = await localRequest("/workspaces")
   const workspace = resolveAssignmentWorkspace(listed, assignment.workspaceId ?? null)
   const workspaceId = String(workspace.id)
-  const client = createWorkspaceSessionClient(local, workspaceId, options.fetchImpl ?? fetch)
+  const client = createWorkspaceSessionClient(local, workspaceId, options.fetchImpl ?? fetch, true)
   const created = await client.createThread({
     title: `Automation: ${assignment.automationName}`.slice(0, 120),
     ...(assignment.instructions ? { prompt: assignment.instructions } : {}),
@@ -922,10 +923,58 @@ function workspaceUnavailable(workspaceId) {
   return error
 }
 
+/**
+ * The desktop app is connected and took the command, but its local OpenWork
+ * server or engine is not answering. Den shows this code as final, so the
+ * caller does not queue the same task again until OpenWork is running.
+ */
+const LOCAL_RUNTIME_UNREACHABLE = Object.freeze({
+  code: "openwork_unreachable",
+  message: "Can't reach OpenWork on your desktop. Make sure OpenWork is running.",
+})
+
+/** Codes the local OpenWork server answers with when its engine is down or not started. */
+const LOCAL_ENGINE_DOWN_CODES = new Set(["opencode_unreachable", "opencode_engine_unreachable", "engine_v2_preview_not_running"])
+
+/** True only when the local runtime gave no answer, or said its engine is down; an engine's own error is not that. */
+function isLocalRuntimeUnreachable(error) {
+  if (error?.code === "runtime_unavailable" || error?.name === "TimeoutError") return true
+  // The session client keeps the server's code, or its whole body when the body uses `error`.
+  if (LOCAL_ENGINE_DOWN_CODES.has(error?.code) || LOCAL_ENGINE_DOWN_CODES.has(error?.body?.error)) return true
+  if (typeof error?.status === "number") return false
+  // No response at all: the session client's network failure, or a raw fetch that was refused, reset or timed out.
+  if (error?.code === "request_failed") return true
+  return /fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|socket hang up|other side closed/i
+    .test(`${serializedError(error)} ${serializedError(error?.cause ?? "")}`)
+}
+
+/** The failure Den stores when a remote command could not start a local session. */
+export function classifyRemoteSessionCommandError(error) {
+  if (error?.code === "workspace_unavailable") {
+    return { code: "workspace_unavailable", message: serializedError(error).slice(0, REMOTE_SESSION_MESSAGE_LIMIT) }
+  }
+  const detail = serializedError(error)
+  // Once a session exists the task started; only a failure to start it is about reachability.
+  if (Reflect.get(Object(error), "sessionId") === undefined && isLocalRuntimeUnreachable(error)) {
+    return {
+      code: LOCAL_RUNTIME_UNREACHABLE.code,
+      message: `${LOCAL_RUNTIME_UNREACHABLE.message}${detail ? ` (details: ${detail.slice(0, 300)})` : ""}`,
+    }
+  }
+  return {
+    code: "execution_failed",
+    message: (detail || "Remote session creation failed").slice(0, REMOTE_SESSION_MESSAGE_LIMIT),
+  }
+}
+
 /** Delivers a remote command as a normal visible local OpenWork session. */
 export async function executeDesktopRemoteSession(assignment, options) {
   const local = await options.getLocalRuntime()
-  if (!local?.baseUrl || !local?.token) throw new Error("The desktop runtime is unavailable")
+  if (!local?.baseUrl || !local?.token) {
+    const error = new Error("The desktop runtime is unavailable")
+    Object.defineProperty(error, "code", { value: "runtime_unavailable" })
+    throw error
+  }
   const localRequest = (requestPath, request = {}) => requestJson(
     options.fetchImpl ?? fetch,
     local.baseUrl,
@@ -1315,13 +1364,7 @@ export function createDesktopAutomationRunner(options) {
       // A session without a first turn has nothing to follow.
       if (result.status === "delivered" && output.started) delivered = output
     } catch (error) {
-      result = {
-        status: "failed",
-        error: {
-          code: error?.code === "workspace_unavailable" ? "workspace_unavailable" : "execution_failed",
-          message: (serializedError(error) || "Remote session creation failed").slice(0, 2_000),
-        },
-      }
+      result = { status: "failed", error: classifyRemoteSessionCommandError(error) }
     }
     try {
       await runnerRequest(state, `/v1/remote-session-commands/${encodeURIComponent(assignment.commandId)}/complete`, {

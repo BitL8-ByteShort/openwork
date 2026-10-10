@@ -23,7 +23,7 @@ import { globalOpencodeConfigDir, workspaceOpencodeConfigCandidates } from "@ope
 import { configureFakeMediaForTests, installMediaPermissionHandlers } from "./media-permissions.mjs";
 import { registerMigrationIpc } from "./migration.mjs";
 import { createRuntimeManager, createSystemCaCertificateVerifyProc } from "./runtime.mjs";
-import { registerUpdaterIpc, resolveAppVersion } from "./updater.mjs";
+import { registerUpdaterIpc, resolveAppVersion, resolveDesktopUpdatePolicy, MANUAL_PREVIEW_UPDATE_REASON } from "./updater.mjs";
 import { createUiControlServer } from "./ui-control-server.mjs";
 import { createApplicationMenu } from "./app-menu.mjs";
 import { createNativeContextMenus } from "./context-menu.mjs";
@@ -87,6 +87,10 @@ import {
   runDetachedTask,
 } from "./process-resilience.mjs";
 import { createQuitSequencer } from "./quit-sequence.mjs";
+import { createRemoteAccessManager, assertRemoteAccessSender } from "./remote-access.mjs";
+import { createRemoteNetwork } from "./remote-access-network.mjs";
+import { createRemoteAccessFeature } from "./remote-access-feature.mjs";
+import { adoptPreviewProfile, shouldRegisterDesktopProtocol } from "./preview-adoption.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, "../../..");
@@ -114,6 +118,7 @@ const pty = require(["node", "pty"].join("-"));
 const NATIVE_DEEP_LINK_EVENT = "openwork:deep-link-native";
 const AUTOMATION_RUNNER_CREDENTIAL_REJECTED_EVENT = "openwork:automation-runner:credential-rejected";
 const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
+const desktopUpdatePolicy = resolveDesktopUpdatePolicy({ isPackaged: app.isPackaged, metadata: desktopPackageMetadata });
 const DESKTOP_DISTRIBUTION = resolveDesktopDistribution({
   isPackaged: app.isPackaged,
   packageFlavor: Reflect.get(desktopPackageMetadata, "openworkDistribution"),
@@ -123,6 +128,7 @@ const TAURI_APP_IDENTIFIER = DESKTOP_DISTRIBUTION.appIdentifier;
 const DEV_APP_IDENTIFIER = `${DESKTOP_DISTRIBUTION.appIdentifier}.dev`;
 const DESKTOP_PROTOCOL_SCHEME = DESKTOP_DISTRIBUTION.protocolScheme;
 const DEFAULT_APP_NAME =
+  (Reflect.get(desktopPackageMetadata, "openworkProductName") === "OpenWork Remote Preview" ? "OpenWork Remote Preview" : "") ||
   (!app.isPackaged ? process.env.OPENWORK_ELECTRON_APP_NAME?.trim() : "") ||
   (isDevMode ? `${DESKTOP_DISTRIBUTION.appName} - Dev` : DESKTOP_DISTRIBUTION.appName);
 const BLANK_SLATE_LAUNCH = resolveBlankSlateLaunch({
@@ -229,12 +235,12 @@ function killTerminalsForWebContents(webContentsId) {
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_IDENTIFIER);
 if (BLANK_SLATE_LAUNCH.homePath) app.setPath("home", BLANK_SLATE_LAUNCH.homePath);
-if (
-  app.isPackaged
-  && !BLANK_SLATE_LAUNCH.enabled
-  && process.env.OPENWORK_ELECTRON_DISABLE_PROTOCOL_REGISTRATION !== "1"
-  && !(process.platform === "linux" && process.env.APPIMAGE)
-) {
+if (shouldRegisterDesktopProtocol({
+  isPackaged: app.isPackaged, metadata: desktopPackageMetadata,
+  blankSlate: BLANK_SLATE_LAUNCH.enabled,
+  disabled: process.env.OPENWORK_ELECTRON_DISABLE_PROTOCOL_REGISTRATION === "1",
+  platform: process.platform, appImage: Boolean(process.env.APPIMAGE),
+})) {
   app.setAsDefaultProtocolClient(DESKTOP_PROTOCOL_SCHEME);
 }
 const userDataPath = BLANK_SLATE_LAUNCH.userDataPath ?? resolveUserDataPath({
@@ -243,6 +249,24 @@ const userDataPath = BLANK_SLATE_LAUNCH.userDataPath ?? resolveUserDataPath({
   userDataOverride: process.env.OPENWORK_ELECTRON_USERDATA,
 });
 app.setPath("userData", userDataPath);
+// Fork packaging opts in through bundled metadata. Adopt only after acquiring
+// the same profile singleton as stable, and before opening workspace stores.
+let previewProfileLock = null;
+if (app.isPackaged && Reflect.get(desktopPackageMetadata, "openworkProductName") === "OpenWork Remote Preview") {
+  previewProfileLock = app.requestSingleInstanceLock();
+  if (!previewProfileLock) app.exit(0);
+  try {
+    const bridgePath = process.platform === "darwin"
+      ? path.join(os.homedir(), "Library/Application Support/OpenWorkRemote")
+      : path.join(process.env.XDG_STATE_HOME && path.isAbsolute(process.env.XDG_STATE_HOME)
+        ? process.env.XDG_STATE_HOME : path.join(os.homedir(), ".local/state"), "openwork-remote");
+    await adoptPreviewProfile({ profilePath: userDataPath, bridgePath,
+      backupRoot: path.join(app.getPath("appData"), "com.saltypanda.openworkremotepreview", "backups") });
+  } catch (error) {
+    dialog.showErrorBox("OpenWork Remote Preview", String(error?.message ?? error));
+    app.exit(1);
+  }
+}
 const linuxDesktopIntegration = createLinuxDesktopIntegration({
   app,
   dialog,
@@ -1295,6 +1319,46 @@ const legacyRunnerBaseUrls = [
   `${DEFAULT_DEN_BASE_URL}/api/den`,
 ].map((value) => normalizeRunnerBaseUrl(value)).filter(Boolean);
 const automationRunnerDisabledBy = automationRunnerDisabledReason(process.env);
+/** @type {typeof import('../../../packages/remote-access/dist/index.js')} */
+const remoteAccessLibrary = require(existsSync(path.join(__dirname, "../remote-access/index.cjs"))
+  ? "../remote-access/index.cjs" : "../../../packages/remote-access/dist/index.cjs");
+const remoteServerVersion = require(existsSync(path.join(__dirname, "../server/package.json"))
+  ? "../server/package.json" : "../../server/package.json").version;
+const remotePlatform = process.platform === "darwin" ? "macos" : "linux";
+const remoteSupported = process.platform === "darwin" || process.platform === "linux";
+// Match the engine's explicit shared-state development option. Ordinary dev
+// profiles stay isolated and cannot acquire the installed app's pairing store.
+const remoteStateRoot = app.isPackaged || process.env.OPENWORK_DEV_SHARED_STATE === "1"
+  ? remoteAccessLibrary.platformDirectories(remotePlatform, os.homedir(), process.env).state
+  : path.join(app.getPath("userData"), "remote-access");
+const remotePreference = remoteAccessLibrary.remoteAccessPreference(remoteStateRoot);
+const remoteFeature = createRemoteAccessFeature({
+  baseUrls: legacyRunnerBaseUrls,
+  localPolicy: app.isPackaged ? null : remoteAccessLibrary.localRemoteAccessPolicy(process.env),
+});
+const remoteAccess = createRemoteAccessManager({
+  featureEnabled: async () => remoteSupported && await remoteFeature.enabled(),
+  readEnabled: async () => remoteSupported && await remotePreference.read(),
+  writeEnabled: (enabled) => remotePreference.write(enabled),
+  readDevices: async () => remoteSupported ? remoteAccessLibrary.readSavedDevices(remoteStateRoot) : [],
+  network: createRemoteNetwork(),
+  start: async (origin) => {
+    await ensureRuntimeBootstrap();
+    const adapter = new remoteAccessLibrary.OpenWorkV2(async () => {
+      const info = assertOpenworkServerReady(await runtimeManager.openworkServerInfo());
+      return { origin: info.baseUrl, token: info.ownerToken ?? info.clientToken };
+    }, true, remoteServerVersion);
+    await adapter.requireChatEngine();
+    return remoteAccessLibrary.startBridge({ adapter, stateDirectory: remoteStateRoot,
+      platform: remotePlatform, architecture: process.arch, origin });
+  },
+});
+// Re-check deployment policy even when Settings is closed. Cached feature decisions
+// expire after 15 seconds; a disabled rollout closes streams on the next refresh.
+const remoteAccessRefresh = setInterval(() => {
+  void remoteAccess.refresh().catch(() => {});
+}, 15000);
+remoteAccessRefresh.unref();
 if (automationRunnerDisabledBy) {
   console.info(`[automation-runner] disabled by ${automationRunnerDisabledBy}; renderer runner configuration will be ignored`);
 }
@@ -1386,6 +1450,8 @@ async function disposeRuntimeBeforeQuit() {
   if (runtimeDisposedForQuit || runtimeDisposeInProgress) return;
   runtimeDisposeInProgress = true;
   try {
+    clearInterval(remoteAccessRefresh);
+    await remoteAccess.dispose().catch(() => undefined);
     await runtimeManager.dispose().catch(() => undefined);
     runtimeDisposedForQuit = true;
   } finally {
@@ -1484,14 +1550,24 @@ async function bootRuntimeForSelectedWorkspace() {
   return { ok: true, skipped: false, engine, openworkServer, workspaceId: bootWorkspace.id ?? null };
 }
 
-function ensureRuntimeBootstrap() {
-  if (!runtimeBootstrapPromise) {
-    runtimeBootstrapPromise = bootRuntimeForSelectedWorkspace().catch((error) => ({
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    }));
-  }
+function startRuntimeBootstrap() {
+  runtimeBootstrapPromise = bootRuntimeForSelectedWorkspace().catch((error) => ({
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  }));
   return runtimeBootstrapPromise;
+}
+
+function ensureRuntimeBootstrap() {
+  const attempt = runtimeBootstrapPromise ?? startRuntimeBootstrap();
+  return attempt.then((result) => {
+    // A failed boot is reported once. The next request, such as Reload on the
+    // error screen, starts a fresh attempt instead of replaying this failure.
+    if (result?.ok === false && runtimeBootstrapPromise === attempt) {
+      runtimeBootstrapPromise = null;
+    }
+    return result;
+  });
 }
 
 function resolveOpencodeConfigPath(scope, projectDir) {
@@ -1729,6 +1805,18 @@ function applyNativeTheme(mode) {
 // typecheck:electron`.
 /** @type {import("@openwork/types/desktop-ipc").DesktopCommandHandlers<import("electron").IpcMainInvokeEvent>} */
 const desktopCommandHandlers = {
+  "remoteAccessStatus": async (event) => remoteAccess.status(),
+  "remoteAccessSetEnabled": async (event, enabled) => remoteAccess.setEnabled(enabled),
+  "remoteAccessFeatureSession": async (event, session) => {
+    try { remoteFeature.configure(session); }
+    catch { await remoteAccess.refresh(); throw new Error("REMOTE_FEATURE_SESSION_REJECTED"); }
+    return remoteAccess.refresh();
+  },
+  "remoteAccessPair": async (event) => remoteAccess.pair(),
+  "remoteAccessApprove": async (event, id, scope) => remoteAccess.approve(id, scope),
+  "remoteAccessDeny": async (event, id) => remoteAccess.deny(id),
+  "remoteAccessUpdateScope": async (event, id, scope) => remoteAccess.access(id, scope),
+  "remoteAccessRevoke": async (event, id) => remoteAccess.revoke(id),
   "workspaceBootstrap": async (event, ...args) => {
       return workspaceStore.readWorkspaceState();
   },
@@ -2024,8 +2112,8 @@ const desktopCommandHandlers = {
   "updaterEnvironment": async (event, ...args) => {
       const executablePath = app.isPackaged ? app.getPath("exe") : process.execPath;
       return {
-        supported: true,
-        reason: null,
+        supported: desktopUpdatePolicy !== "manual",
+        reason: desktopUpdatePolicy === "manual" ? MANUAL_PREVIEW_UPDATE_REASON : null,
         executablePath,
         appBundlePath:
           process.platform === "darwin"
@@ -2351,6 +2439,9 @@ function assertDesktopActivation() {
 }
 
 async function handleDesktopInvoke(event, command, ...args) {
+  if (typeof command === "string" && command.startsWith("remoteAccess")) {
+    assertRemoteAccessSender(event, mainWindow);
+  }
   if (!enterprisePreactivationCommandAllowed(command)) {
     assertDesktopActivation();
   }
@@ -2628,6 +2719,7 @@ if (isDevMode && !app.isPackaged) {
 registerMigrationIpc({ app, ipcMain });
 const { ensureAutoUpdater } = registerUpdaterIpc({
   app,
+  updatePolicy: desktopUpdatePolicy,
   ipcMain,
   getMainWindow: () => mainWindow,
   // All distributions intentionally share one application identifier, so they also
@@ -2644,7 +2736,7 @@ const { ensureAutoUpdater } = registerUpdaterIpc({
   assertActivation: assertDesktopActivation,
 });
 
-if (!app.requestSingleInstanceLock()) {
+if (!(previewProfileLock ?? app.requestSingleInstanceLock())) {
   if (isDevMode && !app.isPackaged) {
     console.error(`[openwork] Another OpenWork dev instance already holds this profile directory:
   ${app.getPath("userData")}
@@ -2740,10 +2832,7 @@ or use: pnpm dev:worktree`);
       });
     }
     if (!desktopActivationRequired(DESKTOP_DISTRIBUTION, bootstrapConfig)) {
-      runtimeBootstrapPromise = bootRuntimeForSelectedWorkspace().catch((error) => ({
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      }));
+      startRuntimeBootstrap();
     }
 
     queueDeepLinks(forwardedDeepLinks(process.argv));

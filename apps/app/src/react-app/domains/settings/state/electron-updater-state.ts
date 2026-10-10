@@ -251,6 +251,10 @@ export function useElectronUpdaterState(options: UseElectronUpdaterStateOptions)
       .then(async (state) => {
         if (cancelled) return;
         dispatchEnvState({ type: "app-version", appVersion: state.currentVersion ?? null });
+        if (state.supported === false) {
+          dispatchEnvState({ type: "unsupported", reason: state.reason ?? ELECTRON_UPDATER_UNSUPPORTED_REASON });
+          return;
+        }
         if (state.channel && state.channel !== policyReleaseChannel && bridge.setChannel) {
           const nextState = await bridge.setChannel(policyReleaseChannel);
           if (cancelled) return;

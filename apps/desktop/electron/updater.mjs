@@ -19,6 +19,13 @@ import {
 } from "./recovery.mjs";
 
 const ELECTRON_UPDATER_CHANNEL_FILENAME = "electron-updater-channel.v1.json";
+export const MANUAL_PREVIEW_UPDATE_REASON = "OpenWork Remote Preview uses manual updates. Close it after work finishes, update the qualified preview build, then reopen OpenWork Remote Preview. Keep the official OpenWork app for rollback.";
+
+/** @param {{isPackaged: boolean, metadata?: Record<string, unknown>, env?: Record<string, string | undefined>}} options */
+export function resolveDesktopUpdatePolicy({ isPackaged, metadata = {}, env = process.env }) {
+  return metadata.openworkUpdatePolicy === "manual" || (!isPackaged && env.OPENWORK_ELECTRON_UPDATE_POLICY === "manual")
+    ? "manual" : "official";
+}
 
 // In dev mode, app.getVersion() returns the Electron framework version
 // (e.g. "35.7.5") instead of the OpenWork app version. Read from
@@ -329,11 +336,28 @@ export function registerUpdaterIpc({
   platform = process.platform,
   arch = process.arch,
   env = process.env,
+  updatePolicy = "official",
   // Throws while the installation still has to be activated. Until then no Den
   // is known, so the organization's allowed-versions policy cannot be honoured
   // and the renderer must not be able to check for, stage, or install updates.
   assertActivation = () => {},
 }) {
+  if (updatePolicy === "manual") {
+    const state = () => ({ channel: "stable", feedUrl: "", currentVersion: resolveAppVersion(app), supported: false, reason: MANUAL_PREVIEW_UPDATE_REASON });
+    ipcMain.handle("openwork:updater:getChannel", async () => state());
+    ipcMain.handle("openwork:updater:setChannel", async () => state());
+    ipcMain.handle("openwork:updater:check", async () => ({ ...state(), available: false, totalBytes: null }));
+    for (const name of ["download", "installAndRestart"]) {
+      ipcMain.handle(`openwork:updater:${name}`, async () => ({ ok: false, reason: MANUAL_PREVIEW_UPDATE_REASON }));
+    }
+    ipcMain.handle("openwork:recovery:recordHealthy", async () => ({ ok: false, reason: MANUAL_PREVIEW_UPDATE_REASON }));
+    ipcMain.handle("openwork:recovery:list", async () => ({ ok: true, releases: [], reason: MANUAL_PREVIEW_UPDATE_REASON }));
+    for (const name of ["use", "restorePrevious"]) {
+      ipcMain.handle(`openwork:recovery:${name}`, async () => ({ ok: false, reason: MANUAL_PREVIEW_UPDATE_REASON }));
+    }
+    ipcMain.handle("openwork:recovery:evalSnapshot", async () => ({ candidates: [], releases: [], installRequests: [], openedArtifactUrls: [], quitRequested: false }));
+    return { ensureAutoUpdater: async () => null };
+  }
   let autoUpdaterInstance = null;
   let autoUpdaterLoadPromise = null;
   let checkedUpdateVersion = null;

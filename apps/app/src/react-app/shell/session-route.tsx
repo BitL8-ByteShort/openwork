@@ -19,6 +19,7 @@ import { toast } from "@/components/ui/sonner";
 import type { ProviderListResponse } from "@opencode-ai/sdk/v2/client";
 
 import { captureAnalyticsEvent, markTaskRunStart } from "@/app/lib/analytics";
+import { trackSessionActive, trackTaskStarted } from "@/app/lib/den-telemetry";
 import { buildDiagnosticsBundleJson } from "@/app/lib/diagnostics-bundle";
 import { downloadTextAsFile } from "@/app/lib/download";
 import { canCreateWorkspaces } from "@/app/lib/workspace-creation-policy";
@@ -109,6 +110,7 @@ import { ActivityPage } from "@/react-app/domains/activity/activity-page";
 import type { ActivityResource } from "@/react-app/kernel/activity-types";
 import { encodeConnectSkillToken } from "@/react-app/domains/session/surface/composer/connect-skill-token";
 import { AutomationsPage } from "@/react-app/domains/automations/automations-page";
+import { automationProviderCatalog } from "@/react-app/domains/automations/automation-model-options";
 import { CalendarPage } from "@/react-app/domains/calendar/calendar-page";
 import { useCalendarFeature } from "@/react-app/domains/calendar/use-calendar-data";
 import { useAutomationsDenContext } from "@/react-app/domains/automations/use-automations";
@@ -210,9 +212,11 @@ import { useBootState } from "./boot-state";
 import {
   forgetWorkspaceMemory,
   readLastSessionFor,
+  readWorkspaceProjectDimension,
   readWorkspaceOrderIds,
   writeActiveWorkspaceId,
   writeLastSessionFor,
+  writeWorkspaceProjectDimension,
   writeWorkspaceOrderIds,
 } from "./session-memory";
 import {
@@ -934,6 +938,12 @@ export function SessionRoute() {
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
   });
+  const automationCatalog = useMemo(
+    () => providerListQuery.data === undefined || providerListQuery.isError
+      ? undefined
+      : automationProviderCatalog(getConnectedProviderItems(filterProviderList(providerListQuery.data, disabledProviderIds))),
+    [providerListQuery.data, providerListQuery.isError, disabledProviderIds],
+  );
   const { providerCatalog, modelVariantLabel, modelBehaviorOptions, modelVariantValue } =
     useModelBehavior({
       providerList: providerListQuery.data,
@@ -1627,6 +1637,30 @@ export function SessionRoute() {
                     model_id: sendModel?.modelID ?? null,
                   });
                   markTaskRunStart(targetSessionId);
+                  // Den org adoption signals (auth-gated inside; no-op when signed out).
+                  // This remains inside the post-readiness send closure so a blocked
+                  // Cloud submission cannot create a run or report that one started.
+                  const projectDimension = readWorkspaceProjectDimension(selectedWorkspaceId);
+                  const modelSelection = sessionModelSelection ? "manual" : "default";
+                  const telemetryDimensions = [
+                    ...(projectDimension ? [{
+                      type: "project",
+                      label: projectDimension.label,
+                    }] : []),
+                    ...(sendModel ? [{
+                      type: "model",
+                      value: `${sendModel.providerID}/${sendModel.modelID}`,
+                      label: `${sendModel.providerID}/${sendModel.modelID}`,
+                    }] : []),
+                    {
+                      type: "model_selection",
+                      value: modelSelection,
+                      label: modelSelection,
+                    },
+                  ];
+                  trackSessionActive(targetSessionId, telemetryDimensions);
+                  trackTaskStarted(targetSessionId, telemetryDimensions);
+
                   if (draft.mode === "shell") {
                     onPrepared?.();
                     await shellInSession(opencodeClient, targetSessionId, text, { messageID: draft.messageId });
@@ -1974,6 +2008,19 @@ export function SessionRoute() {
                     model_id: sendModel?.modelID ?? null,
                   });
                   markTaskRunStart(targetSessionId);
+                  const projectDimension = readWorkspaceProjectDimension(workspace.id);
+                  const modelSelection = sessionModelSelection ? "manual" : "default";
+                  const telemetryDimensions = [
+                    ...(projectDimension ? [{ type: "project", label: projectDimension.label }] : []),
+                    ...(sendModel ? [{
+                      type: "model",
+                      value: `${sendModel.providerID}/${sendModel.modelID}`,
+                      label: `${sendModel.providerID}/${sendModel.modelID}`,
+                    }] : []),
+                    { type: "model_selection", value: modelSelection, label: modelSelection },
+                  ];
+                  trackSessionActive(targetSessionId, telemetryDimensions);
+                  trackTaskStarted(targetSessionId, telemetryDimensions);
                   if (draft.mode === "shell") {
                     onPrepared?.();
                     await shellInSession(workspaceOpencodeClient, targetSessionId, text, { messageID: draft.messageId });
@@ -3354,6 +3401,7 @@ export function SessionRoute() {
   ) => {
     if (!folder) return;
     const agent = newTaskAgent;
+    const projectLabel = options?.projectLabel?.trim() ?? "";
     setCreateWorkspaceBusy(true);
     setCreateWorkspaceError(null);
     try {
@@ -3427,6 +3475,11 @@ export function SessionRoute() {
           : null;
         setLegacySelectedWorkspaceId(targetWorkspaceId);
         writeActiveWorkspaceId(targetWorkspaceId);
+        if (projectLabel) {
+          writeWorkspaceProjectDimension(targetWorkspaceId, {
+            label: projectLabel,
+          });
+        }
         captureAnalyticsEvent("workspace_created", { workspace_type: "local" });
         if (session?.id) {
           useSessionAgentStore.getState().setAgent(session.id, agent);
@@ -3523,18 +3576,20 @@ export function SessionRoute() {
   const createWorkspaceControlAction = useMemo<OpenworkControlAction>(() => ({
     id: "workspace.create",
     label: "Create a local workspace",
-    description: "Create a workspace at the given folder path without showing the file picker dialog.",
+    description: "Create a workspace at the given folder path without showing the file picker dialog, optionally labeling its project for analytics.",
     sideEffect: "mutation",
     requiresArgs: true,
     args: [
       { name: "path", type: "string", required: true, description: "Absolute folder path for the new workspace." },
+      { name: "projectLabel", type: "string", required: false, description: "Optional project name used to group the workspace's sessions in analytics." },
     ],
     execute: async (args) => {
       if (!canCreateWorkspaces()) return { ok: false, error: "workspace creation is unavailable" };
-      const parsed = args as { path?: string } | undefined;
+      const parsed = args as { path?: string; projectLabel?: string } | undefined;
       const folder = parsed?.path?.trim();
       if (!folder) return { ok: false, error: "path is required" };
-      await handleCreateWorkspace("starter", folder);
+      const trimmedLabel = parsed?.projectLabel?.trim() ?? "";
+      await handleCreateWorkspace("starter", folder, trimmedLabel ? { projectLabel: trimmedLabel } : undefined);
       return { path: folder };
     },
   }), [handleCreateWorkspace]);
@@ -3710,14 +3765,14 @@ export function SessionRoute() {
         </WorkspaceProvider>
       ) : automationsRouteActive ? (
         <AutomationsPage
-          providerCatalog={providerCatalog}
+          providerCatalog={automationCatalog}
           workspaceId={selectedWorkspaceId}
           headerActionsTarget={automationsHeaderActionsTarget}
           onSignIn={() => handleOpenSettings("/settings/cloud-account")}
         />
       ) : calendarRouteActive ? (
         <CalendarPage
-          providerCatalog={providerCatalog}
+          providerCatalog={automationCatalog}
           workspaceId={selectedWorkspaceId}
           onSignIn={() => handleOpenSettings("/settings/cloud-account")}
           onOpenConnections={() => handleOpenExtensions()}

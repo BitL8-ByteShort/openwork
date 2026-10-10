@@ -6,6 +6,7 @@ const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 3978);
 const issuer = process.env.ISSUER || `http://${host}:${port}`;
 const extraToolCount = Number(process.env.MOCK_EXTRA_TOOL_COUNT || 0);
+const protectedResource = process.env.MOCK_PROTECTED_RESOURCE || "";
 const autoApprove = process.env.AUTO_APPROVE !== "0";
 const disableDcr = process.env.DISABLE_DCR === "1";
 const rejectDcrRedirectUris = process.env.MOCK_REJECT_DCR_REDIRECT_URIS || "";
@@ -71,6 +72,12 @@ const clients = new Map();
 const codes = new Map();
 const tokens = new Set();
 const refreshTokens = new Set();
+// Each refresh token maps to its grant's { current, previous } refresh tokens.
+const refreshFamilies = new Map();
+// "reject-reuse": a refresh token works once. "keep-latest": the grant's
+// current and previous refresh tokens both work and every refresh makes its
+// new token current, so of concurrent refreshes only the last stays usable.
+let refreshRotation = "reject-reuse";
 let holdRefreshResponses = false;
 let nextRefreshResponseId = 0;
 const pendingRefreshResponses = new Map();
@@ -747,7 +754,7 @@ function record(req, url, res) {
 
 function protectedResourceMetadata() {
   return {
-    resource: `${issuer}/mcp`,
+    resource: protectedResource || `${issuer}/mcp`,
     authorization_servers: [issuer],
     scopes_supported: advertisedScopes,
     bearer_methods_supported: ["header"],
@@ -1013,7 +1020,11 @@ async function issueToken(req, res, entry) {
       return;
     }
     if (strictRefreshTokens) {
-      if (!form.refresh_token || !refreshTokens.has(form.refresh_token)) {
+      const family = refreshFamilies.get(form.refresh_token);
+      const usable = refreshRotation === "keep-latest"
+        ? Boolean(family && (family.current === form.refresh_token || family.previous === form.refresh_token))
+        : Boolean(form.refresh_token && refreshTokens.has(form.refresh_token));
+      if (!usable) {
         await respond(400, { error: "invalid_grant", error_description: "unknown refresh token" });
         return;
       }
@@ -1030,7 +1041,17 @@ async function issueToken(req, res, entry) {
   tokens.add(accessToken);
   const refreshToken = `mock-refresh-${randomUUID()}`;
   const issueRefreshToken = oauthCallback.issueRefreshToken !== false;
-  if (issueRefreshToken) refreshTokens.add(refreshToken);
+  if (issueRefreshToken) {
+    refreshTokens.add(refreshToken);
+    const family = grantType === "refresh_token" ? refreshFamilies.get(form.refresh_token) : undefined;
+    if (family) {
+      family.previous = form.refresh_token;
+      family.current = refreshToken;
+      refreshFamilies.set(refreshToken, family);
+    } else {
+      refreshFamilies.set(refreshToken, { current: refreshToken, previous: null });
+    }
+  }
   entry.tokenId = createHash("sha256").update(accessToken).digest("hex").slice(0, 12);
   entry.refreshTokenIssued = issueRefreshToken;
   await respond(200, {
@@ -1512,6 +1533,8 @@ const server = http.createServer(async (req, res) => {
     // Hold completed refresh responses so a journey can commit a successful
     // rotation before delivering another request's rejection of the old grant.
     if (url.pathname === "/admin/refresh-responses" && req.method === "POST") {
+      const body = await readJson(req).catch(() => ({}));
+      refreshRotation = body?.rotation === "keep-latest" ? "keep-latest" : "reject-reuse";
       tokens.clear();
       strictRefreshTokens = true;
       holdRefreshResponses = true;
@@ -1538,6 +1561,7 @@ const server = http.createServer(async (req, res) => {
       const expiredRefreshTokens = refreshTokens.size;
       tokens.clear();
       refreshTokens.clear();
+      refreshFamilies.clear();
       strictRefreshTokens = true;
       json(res, 200, { expiredAccessTokens, expiredRefreshTokens });
       return;
